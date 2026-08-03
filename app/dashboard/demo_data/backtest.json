@@ -1,0 +1,64 @@
+{
+  "summary": {
+    "total_return_pct": 12.5,
+    "annual_return_pct": 18.3,
+    "sharpe_ratio": 1.35,
+    "max_drawdown_pct": -8.2,
+    "win_rate": 55.2,
+    "profit_loss_ratio": 1.35,
+    "total_trades": 186,
+    "start_date": "2026-04-30",
+    "end_date": "2026-07-29",
+    "initial_capital": 10000,
+    "final_capital": 11250,
+    "params": {
+      "spread": 0.3,
+      "commission_pct": 0.01,
+      "signal_threshold": 0.55
+    }
+  },
+  "accuracy": {
+    "overall_7d": 62.5,
+    "overall_30d": 58.2,
+    "bullish_accuracy": 60.5,
+    "bearish_accuracy": 55.8,
+    "neutral_accuracy": 0
+  },
+  "equity_curve": [
+    {"date": "2026-04-30", "strategy": 10000, "benchmark": 10000},
+    {"date": "2026-05-07", "strategy": 10150, "benchmark": 10080},
+    {"date": "2026-05-14", "strategy": 10230, "benchmark": 10120},
+    {"date": "2026-05-21", "strategy": 10180, "benchmark": 10090},
+    {"date": "2026-05-28", "strategy": 10350, "benchmark": 10150},
+    {"date": "2026-06-04", "strategy": 10480, "benchmark": 10200},
+    {"date": "2026-06-11", "strategy": 10620, "benchmark": 10280},
+    {"date": "2026-06-18", "strategy": 10500, "benchmark": 10230},
+    {"date": "2026-06-25", "strategy": 10750, "benchmark": 10300},
+    {"date": "2026-07-02", "strategy": 10900, "benchmark": 10350},
+    {"date": "2026-07-09", "strategy": 10850, "benchmark": 10320},
+    {"date": "2026-07-16", "strategy": 11050, "benchmark": 10400},
+    {"date": "2026-07-23", "strategy": 11150, "benchmark": 10450},
+    {"date": "2026-07-29", "strategy": 11250, "benchmark": 10500}
+  ],
+  "trade_details": [
+    {"trade_id": 1, "open_time": "2026-07-28 10:30", "direction": "看涨", "open_price": 2380.50, "close_time": "2026-07-28 11:00", "close_price": 2385.20, "pnl": 47.0, "pnl_pct": 0.20, "signal_prob": 0.68},
+    {"trade_id": 2, "open_time": "2026-07-28 11:00", "direction": "看跌", "open_price": 2385.20, "close_time": "2026-07-28 11:30", "close_price": 2382.10, "pnl": -31.0, "pnl_pct": -0.13, "signal_prob": 0.72},
+    {"trade_id": 3, "open_time": "2026-07-28 11:30", "direction": "看涨", "open_price": 2382.10, "close_time": "2026-07-28 12:00", "close_price": 2388.50, "pnl": 64.0, "pnl_pct": 0.27, "signal_prob": 0.65},
+    {"trade_id": 4, "open_time": "2026-07-28 14:00", "direction": "看跌", "open_price": 2390.00, "close_time": "2026-07-28 14:30", "close_price": 2385.30, "pnl": 47.0, "pnl_pct": 0.20, "signal_prob": 0.60},
+    {"trade_id": 5, "open_time": "2026-07-29 09:00", "direction": "看涨", "open_price": 2375.00, "close_time": "2026-07-29 09:30", "close_price": 2378.20, "pnl": 32.0, "pnl_pct": 0.13, "signal_prob": 0.58},
+    {"trade_id": 6, "open_time": "2026-07-29 10:00", "direction": "看跌", "open_price": 2380.00, "close_time": "2026-07-29 10:30", "close_price": 2383.50, "pnl": -35.0, "pnl_pct": -0.15, "signal_prob": 0.62},
+    {"trade_id": 7, "open_time": "2026-07-29 11:00", "direction": "看涨", "open_price": 2383.50, "close_time": "2026-07-29 11:30", "close_price": 2388.00, "pnl": 45.0, "pnl_pct": 0.19, "signal_prob": 0.70},
+    {"trade_id": 8, "open_time": "2026-07-29 13:00", "direction": "观望", "open_price": 2385.00, "close_time": "2026-07-29 13:30", "close_price": 2385.50, "pnl": 0, "pnl_pct": 0, "signal_prob": 0.52}
+  ],
+  "pnl_distribution": {
+    "bins": [-60, -40, -20, 0, 20, 40, 60],
+    "counts": [5, 12, 25, 38, 28, 15, 8]
+  },
+  "hawk_dove_events": [
+    {"date": "2026-07-24", "speaker": "鲍威尔", "score": 0.35, "type": "dove", "label": "鸽派", "summary": "暗示9月可能降息"},
+    {"date": "2026-07-25", "speaker": "沃勒", "score": -0.42, "type": "hawk", "label": "鹰派", "summary": "通胀仍具粘性，不急于降息"},
+    {"date": "2026-07-26", "speaker": "威廉姆斯", "score": 0.28, "type": "dove", "label": "鸽派", "summary": "经济数据支持温和政策"},
+    {"date": "2026-07-27", "speaker": "鲍曼", "score": -0.15, "type": "hawk", "label": "鹰派", "summary": "需看到更多通胀进展"},
+    {"date": "2026-07-28", "speaker": "戴利", "score": 0.10, "type": "dove", "label": "鸽派", "summary": "劳动力市场正在正常化"}
+  ]
+}

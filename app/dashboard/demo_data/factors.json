@@ -1,0 +1,71 @@
+{
+  "timestamp": "2026-07-30T14:00:00",
+  "factors": [
+    {
+      "name": "DXY",
+      "label": "美元指数",
+      "value": 101.5536,
+      "change": 0.12,
+      "change_pct": 0.12,
+      "trend": "up",
+      "trend_color": "red",
+      "unit": "",
+      "source": "新浪财经"
+    },
+    {
+      "name": "TIPS",
+      "label": "实际利率",
+      "value": 2.44,
+      "change": -0.03,
+      "change_pct": -1.21,
+      "trend": "down",
+      "trend_color": "green",
+      "unit": "%",
+      "source": "FRED DFII10"
+    },
+    {
+      "name": "VIX",
+      "label": "恐慌指数",
+      "value": 15.32,
+      "change": 0.05,
+      "change_pct": 0.33,
+      "trend": "flat",
+      "trend_color": "gray",
+      "unit": "",
+      "source": "VIX"
+    },
+    {
+      "name": "GPR",
+      "label": "地缘风险",
+      "value": 195.90,
+      "change": 8.5,
+      "change_pct": 4.53,
+      "trend": "up",
+      "trend_color": "red",
+      "unit": "",
+      "source": "GPR 指数"
+    },
+    {
+      "name": "sentiment",
+      "label": "新闻情感",
+      "value": 0.32,
+      "change": 0.08,
+      "change_pct": 33.33,
+      "trend": "up",
+      "trend_color": "green",
+      "unit": "",
+      "source": "LLM 分析"
+    },
+    {
+      "name": "hawk_dove",
+      "label": "鹰鸽指数",
+      "value": -0.15,
+      "change": -0.10,
+      "change_pct": null,
+      "trend": "down",
+      "trend_color": "green",
+      "unit": "",
+      "source": "LLM 鹰鸽提取"
+    }
+  ]
+}
