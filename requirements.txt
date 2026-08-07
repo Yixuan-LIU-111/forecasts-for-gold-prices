@@ -1,0 +1,40 @@
+# 「点时成金」根依赖清单
+# 对齐 项目方案V1.0 §18.1，并按差距分析 A-1 补充 Playwright
+# 安装：pip install -r requirements.txt
+
+# —— Web / 服务 ——
+fastapi>=0.110
+uvicorn>=0.29
+pydantic>=2.0
+pydantic-settings>=2.0
+streamlit>=1.32
+streamlit-autorefresh>=1.0   # 仪表盘自动刷新（app/dashboard/app.py 顶层依赖）
+httpx>=0.27
+
+# —— 数据库（SQLite 文件型；Python 标准库自带驱动，SQLAlchemy 2.0 ORM）——
+# 注：原 PostgreSQL 方案用的 psycopg2-binary 已移除；SQLite 无需额外驱动依赖。
+sqlalchemy>=2.0
+
+# —— 数据采集 ——
+yfinance>=0.2               # 价格采集（B-4）
+playwright>=1.40            # 新闻爬虫（A-1 补充）+ VIX 爬虫（B-7）
+rapidfuzz>=3.0              # 新闻标题相似度去重（B-6，> 0.8 判定重复）
+python-dateutil>=2.8       # 日期解析（B-5 / B-7）
+requests>=2.31             # DXY/GPR/TIPS/EPU 等 HTTP 抓取（B-7）
+beautifulsoup4>=4.12       # 财经日历 HTML 解析（B-7）
+lxml>=5.0                   # 财经日历解析后端（B-7）
+
+# —— 数据处理 / 模型 ——
+pandas>=2.2
+numpy>=1.26
+lightgbm>=4.3
+xgboost>=2.0
+scikit-learn>=1.4
+joblib>=1.3                  # 模型加载/保存（predictor 运行时依赖）
+
+# —— 调度 / 回测（来自 forecasts-for-gold-prices-main 后端）——
+apscheduler>=3.10            # 后台调度器（core/scheduler，API 启动实时模式时启用）
+
+# —— LLM ——
+langchain>=0.1
+langchain-openai>=0.1

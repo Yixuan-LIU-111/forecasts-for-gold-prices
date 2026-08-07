@@ -7,13 +7,14 @@
     "sentiment_score": 0.78,
     "source": "Reuters",
     "published_at": "2026-07-30T13:58:00",
-    "url": "https://example.com/news/1",
+    "url": "https://www.reuters.com/markets/rates-bonds/",
     "confidence": 0.92,
     "is_important": true,
     "key_sentence": "The Fed is prepared to cut rates if inflation continues to moderate.",
     "topic": "Fed",
     "hawk_dove": "鸽派",
-    "hawk_dove_score": -0.35
+    "hawk_dove_score": -0.35,
+    "title_zh": "美联储主席鲍威尔暗示9月可能降息，美元指数承压下行"
   },
   {
     "id": "n002",
@@ -23,13 +24,14 @@
     "sentiment_score": 0.55,
     "source": "Bloomberg",
     "published_at": "2026-07-30T12:30:00",
-    "url": "https://example.com/news/2",
+    "url": "https://www.bea.gov/data/personal-consumption-expenditures-price-index",
     "confidence": 0.85,
     "is_important": true,
     "key_sentence": "Core PCE rose 2.5% YoY, slightly below the 2.6% forecast.",
     "topic": "Inflation",
     "hawk_dove": null,
-    "hawk_dove_score": null
+    "hawk_dove_score": null,
+    "title_zh": "美国6月核心PCE同比上涨2.5%，略低于预期"
   },
   {
     "id": "n003",
@@ -39,13 +41,14 @@
     "sentiment_score": 0.62,
     "source": "AP News",
     "published_at": "2026-07-30T11:45:00",
-    "url": "https://example.com/news/3",
+    "url": "https://apnews.com/hub/middle-east",
     "confidence": 0.78,
     "is_important": true,
     "key_sentence": "Clashes erupted along the Israel-Lebanon border, raising fears of broader conflict.",
     "topic": "Geopolitical",
     "hawk_dove": null,
-    "hawk_dove_score": null
+    "hawk_dove_score": null,
+    "title_zh": "中东局势再度紧张，以色列与黎巴嫩边境发生交火"
   },
   {
     "id": "n004",
@@ -55,13 +58,14 @@
     "sentiment_score": 0.45,
     "source": "World Gold Council",
     "published_at": "2026-07-30T10:20:00",
-    "url": "https://example.com/news/4",
+    "url": "https://www.gold.org/goldhub/data/gold-etfs-holdings-and-flows",
     "confidence": 0.72,
     "is_important": false,
     "key_sentence": "Holdings rose to 945.3 tonnes, the highest in a month.",
     "topic": "ETF",
     "hawk_dove": null,
-    "hawk_dove_score": null
+    "hawk_dove_score": null,
+    "title_zh": "SPDR黄金ETF持仓量增加2.5吨，创近一个月新高"
   },
   {
     "id": "n005",
@@ -71,29 +75,31 @@
     "sentiment_score": -0.65,
     "source": "CNBC",
     "published_at": "2026-07-30T09:15:00",
-    "url": "https://example.com/news/5",
+    "url": "https://www.cnbc.com/federal-reserve/",
     "confidence": 0.88,
     "is_important": true,
     "key_sentence": "Inflation remains sticky, there is no urgency to cut rates.",
     "topic": "Fed",
     "hawk_dove": "鹰派",
-    "hawk_dove_score": 0.42
+    "hawk_dove_score": 0.42,
+    "title_zh": "美联储沃勒：通胀仍具粘性，不急于降息"
   },
   {
     "id": "n006",
     "title": "中国央行连续第8个月增持黄金储备",
     "sentiment": "bullish",
     "sentiment_label": "利多",
-    "sentiment_score": 0.50,
+    "sentiment_score": 0.5,
     "source": "Reuters",
     "published_at": "2026-07-30T08:30:00",
-    "url": "https://example.com/news/6",
+    "url": "https://www.reuters.com/markets/commodities/",
     "confidence": 0.82,
     "is_important": true,
     "key_sentence": "PBOC added another 15 tonnes of gold to its reserves.",
     "topic": "Central Bank",
     "hawk_dove": null,
-    "hawk_dove_score": null
+    "hawk_dove_score": null,
+    "title_zh": "中国央行连续第8个月增持黄金储备"
   },
   {
     "id": "n007",
@@ -103,13 +109,14 @@
     "sentiment_score": -0.35,
     "source": "Department of Labor",
     "published_at": "2026-07-30T08:00:00",
-    "url": "https://example.com/news/7",
+    "url": "https://www.dol.gov/ui/data.pdf",
     "confidence": 0.75,
     "is_important": false,
     "key_sentence": "Initial jobless claims fell to 215K, below the 225K estimate.",
     "topic": "Economy",
     "hawk_dove": null,
-    "hawk_dove_score": null
+    "hawk_dove_score": null,
+    "title_zh": "美国初请失业金人数低于预期，劳动力市场仍稳健"
   },
   {
     "id": "n008",
@@ -119,44 +126,47 @@
     "sentiment_score": 0.05,
     "source": "Kitco",
     "published_at": "2026-07-30T07:45:00",
-    "url": "https://example.com/news/8",
-    "confidence": 0.60,
+    "url": "https://www.kitco.com/price/precious-metals",
+    "confidence": 0.6,
     "is_important": false,
     "key_sentence": "Gold broke above 2390, triggering technical buying.",
     "topic": "Technical",
     "hawk_dove": null,
-    "hawk_dove_score": null
+    "hawk_dove_score": null,
+    "title_zh": "黄金现货价格突破2390美元，技术性买盘涌入"
   },
   {
     "id": "n009",
     "title": "美元指数回落至101.5附近，创两周新低",
     "sentiment": "bullish",
     "sentiment_label": "利多",
-    "sentiment_score": 0.40,
+    "sentiment_score": 0.4,
     "source": "Bloomberg",
     "published_at": "2026-07-30T07:00:00",
-    "url": "https://example.com/news/9",
-    "confidence": 0.70,
+    "url": "https://www.bloomberg.com/quote/DXY:CUR",
+    "confidence": 0.7,
     "is_important": false,
     "key_sentence": "DXY fell to 101.5, a two-week low.",
     "topic": "DXY",
     "hawk_dove": null,
-    "hawk_dove_score": null
+    "hawk_dove_score": null,
+    "title_zh": "美元指数回落至101.5附近，创两周新低"
   },
   {
     "id": "n010",
     "title": "10年期TIPS收益率小幅回落至2.44%",
     "sentiment": "bullish",
     "sentiment_label": "利多",
-    "sentiment_score": 0.30,
+    "sentiment_score": 0.3,
     "source": "FRED",
     "published_at": "2026-07-30T06:30:00",
-    "url": "https://example.com/news/10",
+    "url": "https://fred.stlouisfed.org/series/DFII10",
     "confidence": 0.65,
     "is_important": false,
     "key_sentence": "10Y TIPS yield edged down to 2.44%.",
     "topic": "Rates",
     "hawk_dove": null,
-    "hawk_dove_score": null
+    "hawk_dove_score": null,
+    "title_zh": "10年期TIPS收益率小幅回落至2.44%"
   }
 ]

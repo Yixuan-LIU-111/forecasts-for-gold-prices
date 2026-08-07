@@ -1,0 +1,1139 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>点时成金 · 黄金 30 分钟方向预测系统</title>
+<!-- 图表引擎：与方案技术栈一致（Plotly 交互式图表） -->
+<script src="https://cdn.plot.ly/plotly-2.35.2.min.js" charset="utf-8"></script>
+<!-- 字体：衬线展示体(Fraunces) + 几何人文无衬线(Plus Jakarta Sans)，CJK 回退系统字体 -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  /* ============================================================
+     设计令牌（OKLCH 感知均匀色彩 · 4pt 间距刻度 · 语义分层）
+     美学方向：编辑式财经终端（暖羊皮纸 + 古铜金 + 深咖 + 衬线标题）
+     ============================================================ */
+  :root{
+    /* —— 中性（暖金色调，避免纯灰死板） —— */
+    --paper:      oklch(97% 0.012 85);
+    --surface:    oklch(99% 0.008 85);
+    --surface-2:  oklch(95% 0.016 85);
+    --ink:        oklch(24% 0.020 65);
+    --ink-2:      oklch(46% 0.018 65);
+    --ink-3:      oklch(62% 0.014 65);
+    --line:       oklch(89% 0.012 82);
+    --line-strong:oklch(80% 0.014 80);
+    /* —— 品牌金 —— */
+    --gold:       oklch(58% 0.115 75);
+    --gold-deep:  oklch(46% 0.110 68);
+    --gold-soft:  oklch(94% 0.042 82);
+    /* —— 语义色：涨 / 看多 = 红，跌 / 看空 = 绿（国内金融视觉习惯） —— */
+    --bull:       oklch(54% 0.150 25);   /* 看多 / 上涨 = 红 */
+    --bull-soft:  oklch(95% 0.040 25);
+    --bear:       oklch(52% 0.120 155);  /* 看空 / 下跌 = 绿 */
+    --bear-soft:  oklch(95% 0.045 155);
+    --neutral:    oklch(56% 0.012 65);
+    --neutral-soft:oklch(95% 0.010 65);
+    /* —— 导航栏（深咖暖调，非纯黑） —— */
+    --rail:       oklch(26% 0.022 60);
+    --rail-2:     oklch(31% 0.022 60);
+    --rail-ink:   oklch(90% 0.012 80);
+    --rail-ink-2: oklch(68% 0.014 80);
+    /* —— 间距 4pt 刻度 —— */
+    --s1:4px; --s2:8px; --s3:12px; --s4:16px; --s5:24px; --s6:32px; --s7:48px;
+    /* —— 字体 —— */
+    --serif:'Fraunces','Songti SC','Noto Serif SC',serif;
+    --sans:'Plus Jakarta Sans',-apple-system,'PingFang SC','Noto Sans SC',sans-serif;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%}
+  body{
+    font-family:var(--sans); color:var(--ink); background:var(--paper);
+    -webkit-font-smoothing:antialiased; font-size:14px; line-height:1.5;
+    font-variant-numeric:tabular-nums;
+  }
+  /* 顶部细金线——品牌签名 */
+  body::before{content:"";position:fixed;top:0;left:0;right:0;height:3px;
+    background:linear-gradient(90deg,var(--gold-deep),var(--gold) 50%,var(--gold-deep));z-index:50}
+
+  /* ============================================================
+     总体布局：左导航栏（模块切换）+ 右工作画布
+     ============================================================ */
+  .app{display:grid;grid-template-columns:252px 1fr;min-height:100vh}
+
+  /* ---------- 模块一外壳：左侧导航（5 个一级功能模块） ---------- */
+  .rail{background:var(--rail);color:var(--rail-ink);padding:var(--s5) var(--s4);
+    position:sticky;top:0;height:100vh;overflow-y:auto;display:flex;flex-direction:column}
+  .brand{display:flex;align-items:center;gap:var(--s3);padding:0 var(--s2) var(--s5)}
+  .brand .mark{width:38px;height:38px;border-radius:11px;flex:0 0 38px;
+    background:linear-gradient(140deg,var(--gold),oklch(72% 0.11 82));
+    display:grid;place-items:center;color:oklch(24% 0.02 60);font-family:var(--serif);
+    font-weight:700;font-size:20px;box-shadow:0 4px 14px rgba(0,0,0,.3)}
+  .brand .name{font-family:var(--serif);font-size:18px;font-weight:600;color:#fff;line-height:1.1}
+  .brand .name small{display:block;font-family:var(--sans);font-size:10.5px;font-weight:500;
+    color:var(--rail-ink-2);letter-spacing:.5px;margin-top:3px}
+  .rail-title{font-size:10.5px;letter-spacing:1.5px;color:var(--rail-ink-2);
+    text-transform:uppercase;padding:var(--s2) var(--s3);margin-top:var(--s3)}
+  .nav{display:flex;flex-direction:column;gap:3px}
+  /* 每个一级模块一项，边界清晰：active 用金色左条 + 暖色底 */
+  .nav button{appearance:none;border:0;text-align:left;cursor:pointer;width:100%;
+    display:flex;align-items:center;gap:var(--s3);padding:13px var(--s3);border-radius:11px;
+    background:transparent;color:var(--rail-ink-2);font-family:var(--sans);font-size:14.5px;
+    font-weight:500;position:relative;transition:.16s}
+  .nav button .ico{width:9px;height:9px;border-radius:50%;background:var(--rail-2);flex:0 0 9px;transition:.16s}
+  .nav button .code{margin-left:auto;font-size:10px;color:var(--rail-ink-2);
+    background:var(--rail-2);padding:2px 8px;border-radius:20px;font-weight:600}
+  .nav button:hover{background:var(--rail-2);color:var(--rail-ink)}
+  .nav button.active{background:linear-gradient(90deg,oklch(46% 0.11 68 / .28),transparent);color:#fff}
+  .nav button.active .ico{background:var(--gold);box-shadow:0 0 0 4px oklch(58% 0.115 75 / .22)}
+  .nav button.active .code{background:oklch(58% 0.115 75 / .25);color:var(--gold)}
+  .rail-foot{margin-top:auto;padding:var(--s3);border-top:1px solid var(--rail-2);font-size:11.5px;color:var(--rail-ink-2)}
+  .rail-foot .row{display:flex;align-items:center;gap:8px;padding:5px 0}
+  .rail-foot .dot{width:7px;height:7px;border-radius:50%;background:oklch(50% 0.13 150)} /* 健康=绿，独立于涨跌语义 */
+
+  /* ---------- 模块一外壳：右工作画布 ---------- */
+  .canvas{display:flex;flex-direction:column;min-width:0}
+  .topbar{display:flex;align-items:center;gap:var(--s4);padding:var(--s4) var(--s6);
+    border-bottom:1px solid var(--line);background:var(--surface)}
+  .topbar h1{font-family:var(--serif);font-size:21px;font-weight:600;margin:0;letter-spacing:.2px}
+  .topbar .crumb{font-size:12.5px;color:var(--ink-3)}
+  .topbar .spacer{flex:1}
+  .status{display:inline-flex;align-items:center;gap:7px;font-size:12.5px;font-weight:600;
+    color:var(--gold-deep);background:var(--gold-soft);padding:6px 13px;border-radius:30px}
+  .status .pulse{width:8px;height:8px;border-radius:50%;background:var(--gold);
+    box-shadow:0 0 0 0 var(--gold);animation:pulse 2s infinite}
+  @keyframes pulse{0%{box-shadow:0 0 0 0 oklch(58% 0.115 75 / .5)}70%{box-shadow:0 0 0 7px transparent}100%{box-shadow:0 0 0 0 transparent}}
+  .clock{font-size:13px;color:var(--ink-2);font-weight:600;font-variant-numeric:tabular-nums}
+
+  /* 行情滚动条（终端签名细节） */
+  .ticker{border-bottom:1px solid var(--line);background:var(--surface-2);overflow:hidden;
+    display:flex;align-items:center;gap:var(--s6);padding:8px var(--s6);white-space:nowrap;
+    font-size:12.5px;color:var(--ink-2)}
+  .ticker b{color:var(--ink);font-weight:600}
+  .ticker .up{color:var(--bull)} .ticker .down{color:var(--bear)}
+
+  .scroll{overflow-y:auto}
+  .content{padding:var(--s6) var(--s6) var(--s7);max-width:1320px}
+
+  /* ============================================================
+     视图切换
+     ============================================================ */
+  .view{display:none}
+  .view.active{display:block;animation:rise .3s ease both}
+  @keyframes rise{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+
+  /* ============================================================
+     分区带（模块边界核心手段）
+     ============================================================ */
+  .band{padding:var(--s5) 0 var(--s6);border-top:1px solid var(--line)}
+  .band:first-of-type{border-top:0;padding-top:0}
+  .band-head{display:flex;align-items:baseline;gap:var(--s3);margin-bottom:var(--s3)}
+  .band-num{font-family:var(--serif);font-weight:600;font-size:15px;color:var(--gold-deep);
+    background:var(--gold-soft);border:1px solid var(--gold-soft);border-radius:8px;
+    padding:2px 10px;line-height:1.4}
+  .band-title{font-family:var(--serif);font-size:19px;font-weight:600;color:var(--ink);letter-spacing:.3px}
+  .band-meta{margin-left:auto;font-size:12px;color:var(--ink-3);font-weight:500;
+    background:var(--surface-2);padding:4px 11px;border-radius:20px}
+  .band-rule{height:2px;background:linear-gradient(90deg,var(--gold),oklch(58% 0.115 75 / 0));
+    border-radius:2px;margin-bottom:var(--s5)}
+  .band-note{font-size:12.5px;color:var(--ink-2);line-height:1.7;margin:0 0 var(--s4)}
+
+  /* 网格（自适配，左对齐不居中） */
+  .grid{display:grid;gap:var(--s4)}
+  .g-2{grid-template-columns:1fr 1fr}
+  .g-3{grid-template-columns:repeat(3,1fr)}
+  .g-4{grid-template-columns:repeat(4,1fr)}
+  .g-asym{grid-template-columns:1.6fr 1fr}
+  .g-asym2{grid-template-columns:1fr 1.4fr}
+  @container (max-width:980px){.g-2,.g-3,.g-4,.g-asym,.g-asym2{grid-template-columns:1fr}}
+  .content{container-type:inline-size}
+
+  /* 轻量瓦片 */
+  .tile{border:1px solid var(--line);border-radius:12px;background:var(--surface);padding:var(--s4);
+    transition:.16s}
+  .tile:hover{border-color:var(--line-strong)}
+  .tile h4{margin:0 0 var(--s3);font-size:12.5px;color:var(--ink-2);font-weight:600;
+    display:flex;align-items:center;gap:8px}
+  .tile h4 .tag{font-size:10px;font-weight:600;color:var(--gold-deep);background:var(--gold-soft);
+    padding:1px 8px;border-radius:20px}
+  .metric{font-family:var(--serif);font-size:30px;font-weight:600;line-height:1.05;
+    font-variant-numeric:tabular-nums}
+  .metric .u{font-size:14px;color:var(--ink-2);font-family:var(--sans);font-weight:500;margin-left:4px}
+  .sub{font-size:12.5px;color:var(--ink-2);margin-top:6px}
+  .c-bull{color:var(--bull)} .c-bear{color:var(--bear)} .c-neutral{color:var(--neutral)}
+  .bg-bull{background:var(--bull-soft)} .bg-bear{background:var(--bear-soft)} .bg-neutral{background:var(--neutral-soft)}
+  .c-ok{color:oklch(50% 0.13 150)} /* 系统健康/正常状态，独立于涨跌语义 */
+
+  /* 信号主卡 */
+  .signal{border:1px solid var(--line-strong);border-radius:14px;padding:var(--s5);
+    background:var(--surface);position:relative;overflow:hidden}
+  .signal::before{content:"";position:absolute;left:0;top:0;bottom:0;width:5px;background:var(--bull)}
+  .signal.bear::before{background:var(--bear)}
+  .signal .k{font-size:12.5px;color:var(--ink-2);text-transform:uppercase;letter-spacing:.5px}
+  .signal .dir{font-family:var(--serif);font-size:34px;font-weight:600;margin:6px 0 2px}
+  .signal .prob{font-size:14px;color:var(--ink-2)}
+  .signal .facts{display:grid;grid-template-columns:repeat(3,1fr);gap:var(--s3);margin-top:var(--s4);
+    border-top:1px dashed var(--line);padding-top:var(--s4)}
+  .signal .facts div .l{font-size:11.5px;color:var(--ink-3)}
+  .signal .facts div .v{font-size:18px;font-weight:700;margin-top:3px}
+
+  /* 多空评分 */
+  .score{display:flex;align-items:center;gap:var(--s4)}
+  .score .n{font-family:var(--serif);font-size:46px;font-weight:600;line-height:1}
+  .score .bar{flex:1;height:14px;border-radius:8px;position:relative;
+    background:linear-gradient(90deg,var(--bear) 0%,oklch(70% 0.12 155) 30%,var(--neutral-soft) 50%,oklch(70% 0.12 25) 70%,var(--bull) 100%)}
+  .score .knob{position:absolute;top:-5px;width:4px;height:24px;background:var(--ink);
+    border-radius:3px;transform:translateX(-50%)}
+  .score .lab{font-size:14px;font-weight:700}
+
+  /* 新闻条目（列表分组，非卡片） */
+  .feed{border-top:1px solid var(--line)}
+  .feed .item{display:flex;gap:var(--s3);padding:var(--s4) 0;border-bottom:1px solid var(--line)}
+  .feed .chip{flex:0 0 30px;height:30px;border-radius:50%;display:grid;place-items:center;
+    font-size:13px;font-weight:700}
+  .feed .body .t{font-size:14.5px;font-weight:600;line-height:1.45}
+  .news-link{color:inherit;text-decoration:none;border-bottom:1px solid transparent;transition:color .15s,border-color .15s}
+  .news-link:hover{color:var(--gold);border-bottom-color:var(--gold)}
+  .news-link::after{content:'↗';font-size:.78em;margin-left:4px;opacity:.55}
+  code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12px;background:var(--bg-2,rgba(0,0,0,.04));padding:1px 5px;border-radius:4px}
+  .feed .body .m{font-size:12px;color:var(--ink-2);margin-top:5px;display:flex;gap:var(--s3);flex-wrap:wrap}
+  .feed .body .m span b{color:var(--ink)}
+  .feed .body .ks{font-size:12px;color:var(--ink-3);font-style:italic;margin-top:6px}
+
+  /* 表格 */
+  table{width:100%;border-collapse:collapse;font-size:13px}
+  th,td{text-align:left;padding:10px var(--s3);border-bottom:1px solid var(--line)}
+  th{color:var(--ink-3);font-weight:600;font-size:12px;text-transform:uppercase;letter-spacing:.4px;
+    background:var(--surface-2)}
+  tbody tr:hover{background:var(--surface-2)}
+  td .pill{font-size:11px;font-weight:600;padding:2px 9px;border-radius:20px}
+
+  /* 表单 */
+  label{display:block;font-size:12.5px;color:var(--ink-2);font-weight:600;margin:var(--s4) 0 var(--s2)}
+  input,select{width:100%;padding:10px 12px;border:1px solid var(--line-strong);border-radius:10px;
+    font:inherit;font-size:13.5px;background:var(--surface);color:var(--ink)}
+  input:focus,select:focus{outline:2px solid var(--gold);outline-offset:1px;border-color:var(--gold)}
+  .btn{appearance:none;border:0;cursor:pointer;font:inherit;font-weight:600;font-size:14px;
+    padding:11px 20px;border-radius:10px;background:var(--gold);color:oklch(24% 0.02 60);transition:.16s}
+  .btn:hover{background:var(--gold-deep);color:#fff}
+  .btn.ghost{background:var(--surface);color:var(--ink);border:1px solid var(--line-strong)}
+  .btn:disabled{opacity:.6;cursor:progress}
+  .field-row{display:grid;grid-template-columns:1fr 1fr;gap:var(--s4)}
+
+  /* 展开（可解释性：信号归因） */
+  details{border:1px solid var(--line);border-radius:12px;background:var(--surface);margin-top:var(--s4)}
+  details summary{cursor:pointer;padding:var(--s3) var(--s4);font-weight:600;font-size:13.5px;
+    color:var(--gold-deep);list-style:none;display:flex;align-items:center;gap:8px}
+  details summary::before{content:"▸";transition:.15s}
+  details[open] summary::before{content:"▾"}
+  details .inner{padding:0 var(--s4) var(--s4)}
+
+  .legend{display:flex;gap:var(--s4);font-size:12px;color:var(--ink-2);margin-top:var(--s3);flex-wrap:wrap}
+  .legend span{display:inline-flex;align-items:center;gap:7px}
+  .legend i{width:11px;height:11px;border-radius:3px;display:inline-block}
+  .muted{color:var(--ink-3);font-size:12px}
+  .chart{width:100%}
+
+  /* ============================================================
+     加载 / 空 / 错误 状态
+     ============================================================ */
+  .state{padding:34px 12px;text-align:center;color:var(--ink-3);font-size:13px;min-height:120px;
+    display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px}
+  .state .spin{width:22px;height:22px;border:3px solid var(--line-strong);border-top-color:var(--gold);
+    border-radius:50%;animation:spin .8s linear infinite}
+  @keyframes spin{to{transform:rotate(360deg)}}
+  .state .err{color:var(--bear);font-weight:600}
+  .state .empty{color:var(--ink-3)}
+  .state button{margin-top:4px}
+</style>
+</head>
+<body>
+<div class="app">
+
+  <!-- ============== 左导航：5 个一级功能模块（清晰边界） ============== -->
+  <nav class="rail">
+    <div class="brand">
+      <div class="mark">金</div>
+      <div class="name">点时成金<small>30MIN DIRECTION</small></div>
+    </div>
+    <div class="rail-title">功能模块</div>
+    <div class="nav" id="nav">
+      <button class="active" data-view="dashboard"><span class="ico"></span>仪表盘<span class="code">监测</span></button>
+      <button data-view="news"><span class="ico"></span>新闻中心<span class="code">资讯</span></button>
+      <button data-view="backtest"><span class="ico"></span>回测分析<span class="code">回测</span></button>
+      <button data-view="stats"><span class="ico"></span>准确率统计<span class="code">统计</span></button>
+      <button data-view="settings"><span class="ico"></span>系统设置<span class="code">配置</span></button>
+    </div>
+    <div class="rail-foot">
+      <div class="row"><span class="dot"></span>系统运行正常</div>
+      <div class="row"><span class="dot" style="background:var(--gold)"></span>信号延迟 1.8s</div>
+      <div class="row"><span class="dot" style="background:var(--ink-3)"></span>数据 3 个月</div>
+    </div>
+  </nav>
+
+  <!-- ============== 右画布 ============== -->
+  <main class="canvas">
+    <header class="topbar">
+      <h1 id="pageTitle">实时仪表盘</h1>
+      <span class="crumb" id="pageCrumb">可视化仪表盘</span>
+      <span class="spacer"></span>
+      <span class="status" id="refreshStatus" title="点击立即刷新">实时刷新中…</span>
+      <span class="clock" id="clock">--:--:--</span>
+      <span class="muted" id="lastUpdate"></span>
+    </header>
+
+    <div class="ticker" id="ticker">
+      <span><b>XAU/USD</b> <span id="tkXau">--</span></span>
+      <span><b>DXY</b> <span id="tkDxy">--</span></span>
+      <span><b>VIX</b> <span id="tkVix">--</span></span>
+      <span><b>TIPS 10Y</b> <span id="tkTips">--</span></span>
+      <span><b>鹰鸽指数</b> <span id="tkHawk">--</span></span>
+      <span><b>情感均值</b> <span id="tkSent">--</span></span>
+    </div>
+
+    <div class="scroll">
+      <div class="content">
+
+        <!-- =====================================================================
+             视图 1 · 仪表盘 —— 监测中枢
+        ====================================================================== -->
+        <section class="view active" data-view="dashboard">
+
+          <!-- ① 实时行情 -->
+          <div class="band">
+            <div class="band-head"><span class="band-num">①</span><span class="band-title">实时行情</span><span class="band-meta">市场数据采集</span></div>
+            <div class="band-rule"></div>
+            <p class="band-note">XAU/USD 分钟级实时价格与关联指标：行情与美元指数来自新浪财经，VIX 来自 CBOE，10Y 实际利率来自 FRED（DFII10）。Plotly 折线图随页面刷新周期更新，具体数据源见「系统设置 · 数据源配置」。</p>
+            <div class="grid g-asym">
+              <div class="tile">
+                <h4>实时黄金价格走势 <span class="tag">Plotly</span></h4>
+                <div id="priceChart" class="chart" style="height:300px"></div>
+                <div class="legend">
+                  <span><i style="background:var(--gold)"></i>XAU/USD</span>
+                  <span><i style="background:var(--ink-3)"></i>30 分钟均线</span>
+                </div>
+              </div>
+              <div class="tile" id="quoteBox">
+                <div class="state"><div class="spin"></div>加载行情中…</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- ② 信号决策 -->
+          <div class="band">
+            <div class="band-head"><span class="band-num">②</span><span class="band-title">信号决策</span><span class="band-meta">信号生成 + 多空评分</span></div>
+            <div class="band-rule"></div>
+            <div class="grid g-asym2">
+              <div id="signalBox"><div class="state"><div class="spin"></div>加载信号中…</div></div>
+              <div class="tile" id="scoreBox">
+                <div class="state"><div class="spin"></div>加载评分中…</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- ③ 资讯情绪 -->
+          <div class="band">
+            <div class="band-head"><span class="band-num">③</span><span class="band-title">资讯情绪</span><span class="band-meta">新闻采集 + 情感分析</span></div>
+            <div class="band-rule"></div>
+            <p class="band-note">最新黄金相关新闻与情感标签（红=利多、绿=利空、灰=中性）。当前演示环境由内置规则引擎产出 sentiment_score / topic / confidence；生产环境接入 NewsAPI / GNews 采集与 LLM 情感分析，LLM 不可用时自动降级为规则引擎。点击标题可跳转原文。</p>
+            <div class="grid g-2">
+              <div class="tile">
+                <h4>最新新闻 + 情感标签</h4>
+                <div id="newsFeed"><div class="state"><div class="spin"></div>加载新闻中…</div></div>
+              </div>
+              <div class="tile">
+                <h4>情感分布（滚动窗口）</h4>
+                <div id="sentChart" class="chart" style="height:240px"></div>
+                <div class="legend">
+                  <span><i style="background:var(--bull)"></i>利多</span>
+                  <span><i style="background:var(--neutral)"></i>中性</span>
+                  <span><i style="background:var(--bear)"></i>利空</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- ④ 因子监控 -->
+          <div class="band">
+            <div class="band-head"><span class="band-num">④</span><span class="band-title">因子监控</span><span class="band-meta">实时因子面板</span></div>
+            <div class="band-rule"></div>
+            <div class="grid g-4" id="factorBox">
+              <div class="state"><div class="spin"></div>加载因子中…</div>
+            </div>
+          </div>
+
+          <!-- ⑤ 绩效速览 -->
+          <div class="band">
+            <div class="band-head"><span class="band-num">⑤</span><span class="band-title">绩效速览</span><span class="band-meta">概览（详情见对应模块）</span></div>
+            <div class="band-rule"></div>
+            <div class="grid g-2">
+              <div class="tile"><h4>滚动准确率（7d / 30d）</h4><div id="accMini" class="chart" style="height:220px"></div></div>
+              <div class="tile"><h4>回测权益曲线（缩略）</h4><div id="eqMini" class="chart" style="height:220px"></div></div>
+            </div>
+          </div>
+        </section>
+
+        <!-- =====================================================================
+             视图 2 · 新闻中心
+        ====================================================================== -->
+        <section class="view" data-view="news">
+          <div class="band">
+            <div class="band-head"><span class="band-num">①</span><span class="band-title">采集状态</span><span class="band-meta">新闻数据采集</span></div>
+            <div class="band-rule"></div>
+            <div class="grid g-4" id="newsStatBox">
+              <div class="state"><div class="spin"></div>加载中…</div>
+            </div>
+          </div>
+          <div class="band">
+            <div class="band-head"><span class="band-num">②</span><span class="band-title">新闻流 + 情感分析</span><span class="band-meta">新闻情感分析</span></div>
+            <div class="band-rule"></div>
+            <p class="band-note">对每条新闻输出 sentiment_score（-1~+1）、topic、confidence、key_sentence。当前演示环境由规则引擎计算；生产环境优先调用 LLM，超时或失败时自动降级为规则引擎。实际状态见「系统设置 · 模型配置」。</p>
+            <div class="tile">
+              <div id="newsTableBox"><div class="state"><div class="spin"></div>加载新闻中…</div></div>
+            </div>
+          </div>
+          <div class="band">
+            <div class="band-head"><span class="band-num">③</span><span class="band-title">鹰鸽指数</span><span class="band-meta">货币政策预期</span></div>
+            <div class="band-rule"></div>
+            <div class="grid g-3">
+              <div class="tile"><h4>当前鹰鸽分数</h4><div id="hawkScore" class="metric">--</div><div class="sub" id="hawkSub">加载中…</div></div>
+              <div class="tile"><h4>超预期程度</h4><div class="metric" id="hawkSurprise">--</div><div class="sub">略超市场预期</div></div>
+              <div class="tile"><h4>近期讲话</h4><div id="hawkRecent" class="metric" style="font-size:16px">--</div><div class="sub">检测官员姓名 / FOMC 关键词</div></div>
+            </div>
+            <div class="tile" style="margin-top:var(--s4)">
+              <h4>鹰鸽事件流</h4>
+              <div id="hawkFeed"><div class="state"><div class="spin"></div>加载中…</div></div>
+            </div>
+            <p class="band-note" style="margin-top:var(--s4)">映射规则：鹰派 → -0.5（利空黄金），鸽派 → +0.5（利多黄金）；讲话同时含鹰鸽表述时取加权平均。</p>
+          </div>
+        </section>
+
+        <!-- =====================================================================
+             视图 3 · 回测分析
+        ====================================================================== -->
+        <section class="view" data-view="backtest">
+          <div class="band">
+            <div class="band-head"><span class="band-num">①</span><span class="band-title">回测配置</span><span class="band-meta">参数配置</span></div>
+            <div class="band-rule"></div>
+            <div class="tile">
+              <div class="field-row">
+                <div><label>回测时间范围</label><select id="btRange"><option value="3m">近 3 个月（默认）</option><option value="1m">近 1 个月</option><option value="6m">近 6 个月</option></select></div>
+                <div><label>初始资金（USD）</label><input id="btCapital" value="10000" inputmode="decimal"></div>
+                <div><label>点差（USD）</label><input id="btSpread" value="0.3" inputmode="decimal"></div>
+                <div><label>手续费（%）</label><input id="btCommission" value="0.01" inputmode="decimal"></div>
+                <div><label>信号阈值（0~1）</label><input id="btThreshold" value="0.55" inputmode="decimal"></div>
+              </div>
+              <div style="margin-top:var(--s5);display:flex;gap:var(--s3);align-items:center;flex-wrap:wrap">
+                <button class="btn" id="runBt">运行回测</button>
+                <button class="btn ghost" id="exportBt">导出报告</button>
+                <span class="muted" id="btHint">参数修改后点击「运行回测」重新计算</span>
+              </div>
+            </div>
+          </div>
+          <div class="band">
+            <div class="band-head"><span class="band-num">②</span><span class="band-title">绩效指标</span><span class="band-meta">输出指标</span></div>
+            <div class="band-rule"></div>
+            <div class="grid g-4" id="btSummaryBox">
+              <div class="state"><div class="spin"></div>加载回测结果中…</div>
+            </div>
+          </div>
+          <div class="band">
+            <div class="band-head"><span class="band-num">③</span><span class="band-title">收益曲线</span><span class="band-meta">权益曲线</span></div>
+            <div class="band-rule"></div>
+            <div class="tile"><div id="eqChart" class="chart" style="height:340px"></div>
+              <div class="legend"><span><i style="background:var(--gold)"></i>策略权益</span><span><i style="background:var(--ink-3)"></i>买入持有基准</span></div>
+            </div>
+          </div>
+        </section>
+
+        <!-- =====================================================================
+             视图 4 · 准确率统计
+        ====================================================================== -->
+        <section class="view" data-view="stats">
+          <div class="band">
+            <div class="band-head"><span class="band-num">①</span><span class="band-title">滚动窗口准确率</span><span class="band-meta">7d / 30d</span></div>
+            <div class="band-rule"></div>
+            <div class="tile"><div id="accChart" class="chart" style="height:300px"></div>
+              <div class="legend"><span><i style="background:var(--gold)"></i>7 天滚动</span><span><i style="background:var(--bull)"></i>30 天滚动</span><span><i style="background:var(--ink-3)"></i>60% 目标线</span></div>
+            </div>
+          </div>
+          <div class="band">
+            <div class="band-head"><span class="band-num">②</span><span class="band-title">按方向分类准确率</span><span class="band-meta">信号方向</span></div>
+            <div class="band-rule"></div>
+            <div class="grid g-2">
+              <div class="tile"><div id="dirChart" class="chart" style="height:260px"></div></div>
+              <div class="tile">
+                <h4>说明</h4>
+                <div id="dirFeed"><div class="state"><div class="spin"></div>加载中…</div></div>
+              </div>
+            </div>
+          </div>
+          <div class="band">
+            <div class="band-head"><span class="band-num">③</span><span class="band-title">与基准对比</span><span class="band-meta">买入持有</span></div>
+            <div class="band-rule"></div>
+            <div class="grid g-3" id="benchBox">
+              <div class="state"><div class="spin"></div>加载中…</div>
+            </div>
+          </div>
+        </section>
+
+        <!-- =====================================================================
+             视图 5 · 系统设置（数据源 + 模型 + 信号 + 监控）
+        ====================================================================== -->
+        <section class="view" data-view="settings">
+          <div class="band">
+            <div class="band-head"><span class="band-num">①</span><span class="band-title">数据源配置</span><span class="band-meta">采集配置</span></div>
+            <div class="band-rule"></div>
+            <div class="tile">
+              <div id="dsBox"><div class="state"><div class="spin"></div>加载数据源配置中…</div></div>
+              <div class="muted" style="margin-top:var(--s3)" id="dsNote">数据源清单由后端 /api/v1/system/data-sources 提供。</div>
+            </div>
+          </div>
+          <div class="band">
+            <div class="band-head"><span class="band-num">②</span><span class="band-title">模型配置</span><span class="band-meta">推理配置</span></div>
+            <div class="band-rule"></div>
+            <div class="tile">
+              <div id="modelBox"><div class="state"><div class="spin"></div>加载模型配置中…</div></div>
+            </div>
+          </div>
+          <div class="band">
+            <div class="band-head"><span class="band-num">③</span><span class="band-title">信号参数</span><span class="band-meta">信号生成器</span></div>
+            <div class="band-rule"></div>
+            <div class="tile">
+              <div id="sigParamBox"><div class="state"><div class="spin"></div>加载信号参数中…</div></div>
+            </div>
+          </div>
+          <div class="band">
+            <div class="band-head"><span class="band-num">④</span><span class="band-title">系统监控</span><span class="band-meta">管理员 · 状态面板</span></div>
+            <div class="band-rule"></div>
+            <div class="grid g-4" id="sysBox">
+              <div class="state"><div class="spin"></div>加载系统状态中…</div>
+            </div>
+          </div>
+        </section>
+
+      </div>
+    </div>
+  </main>
+</div>
+
+<script>
+/* ===================== 后端联调：API 客户端 ===================== */
+/* API 基址：
+   - file:// 双击打开：直连本机后端（需后端确实在本机 127.0.0.1:8000 运行）
+   - http(s): 同源相对地址 '' → 请求落到"托管本页面的后端 origin"，
+     这样在 WorkBuddy 预览/远程隧道里也能正确取到数（避免 localhost 跨域/跨机取数失败） */
+const API_BASE = (location.protocol === 'file:')
+  ? 'http://127.0.0.1:8000'        // 本地双击打开时直连本机后端
+  : (window.API_BASE || '');        // 同源：留空走相对路径
+
+/* 统一请求封装：解析 {code,message,data} 信封，统一错误处理。
+   后端无鉴权（demo 模式），此处预留 Authorization 注入位。 */
+async function api(path, opts = {}) {
+  let res;
+  try {
+    res = await fetch(API_BASE + path, {
+      ...opts,
+      headers: { 'Content-Type': 'application/json', ...(opts.headers || {}) },
+    });
+  } catch (e) {
+    // 网络层失败（含 CORS / 后端未启动）
+    throw new Error('无法连接后端服务（' + (e && e.message ? e.message : 'network') + '），请确认 API 已启动于 ' + API_BASE);
+  }
+  let json;
+  try { json = await res.json(); } catch (_) { json = null; }
+  if (!res.ok) {
+    const detail = (json && (json.message || json.detail)) || ('HTTP ' + res.status);
+    throw new Error(detail);
+  }
+  if (!json || json.code !== 200) {
+    throw new Error((json && json.message) || '接口返回异常');
+  }
+  return json.data;
+}
+
+/* 状态渲染辅助 */
+function stateLoading(msg) { return '<div class="state"><div class="spin"></div>' + (msg || '加载中…') + '</div>'; }
+function stateError(err, retry) {
+  const html = '<div class="state"><div class="err">⚠ ' + escapeHtml(err.message || String(err)) + '</div>' +
+    (retry ? '<button class="btn ghost" onclick="(' + retry + ')()">重试</button>' : '') + '</div>';
+  return html;
+}
+function stateEmpty(msg) { return '<div class="state"><div class="empty">' + (msg || '暂无数据') + '</div></div>'; }
+function escapeHtml(s) { return String(s).replace(/[&<>"']/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c])); }
+function fmt(n, d = 2) { return (n == null || isNaN(n)) ? '--' : Number(n).toFixed(d); }
+function arrow(v) { return v > 0 ? '▲' : (v < 0 ? '▼' : '—'); }
+/* 新闻标题：优先展示中文概括标题 title_zh，英文原标题放入 title 提示；
+   有原文链接时渲染为可点击外链，否则退化为纯文本 */
+function newsLink(n) {
+  const display = escapeHtml(n.title_zh || n.title || '');
+  const original = escapeHtml(n.title || '');
+  const url = n && n.url ? String(n.url) : '';
+  if (!/^https?:\/\//i.test(url)) return display;
+  return '<a class="news-link" href="' + escapeHtml(url) + '" target="_blank" rel="noopener noreferrer" title="' + original + '">' + display + '</a>';
+}
+
+/* 颜色语义反转：后端采用国际惯例（red=利空/bearish, green=利多/bullish），
+   前端采用国内习惯（红=涨/利多, 绿=跌/利空）。此处把后端 color 翻转为前端语义。 */
+const INV = { red: 'bear', green: 'bull', gray: 'neutral' }; // 后端红→利空→绿；后端绿→利多→红
+function inv(backendColor) { return INV[backendColor] || 'neutral'; }
+/* 信号方向：bullish→红(涨), bearish→绿(跌), neutral→灰 */
+const DIR = { bullish: 'bull', bearish: 'bear', neutral: 'neutral' };
+function dirCls(en) { return DIR[en] || 'neutral'; }
+
+/* ===================== 导航切换 ===================== */
+const titles = {
+  dashboard:['实时仪表盘','可视化仪表盘'],
+  news:['新闻中心','新闻采集 / 情感分析 / 鹰鸽指数'],
+  backtest:['回测分析','模拟交易回测'],
+  stats:['准确率统计','历史准确率统计'],
+  settings:['系统设置','数据源 / 模型 / 信号 / 监控']
+};
+const nav = document.getElementById('nav');
+const loaded = {};
+function showView(view){
+  document.querySelectorAll('.view').forEach(v=>v.classList.toggle('active', v.dataset.view===view));
+  nav.querySelectorAll('button').forEach(b=>b.classList.toggle('active', b.dataset.view===view));
+  document.getElementById('pageTitle').textContent = titles[view][0];
+  document.getElementById('pageCrumb').textContent = titles[view][1];
+  if(view==='dashboard') loadDashboard();
+  if(view==='news') loadNews();
+  if(view==='backtest') loadBacktest();
+  if(view==='stats') loadStats();
+  if(view==='settings') loadSettings();
+  setTimeout(()=>window.dispatchEvent(new Event('resize')), 80);
+}
+nav.addEventListener('click', e=>{ const b=e.target.closest('button'); if(b) showView(b.dataset.view); });
+
+/* ===================== 时钟 ===================== */
+function tick(){ const d=new Date();
+  document.getElementById('clock').textContent =
+    String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0')+':'+String(d.getSeconds()).padStart(2,'0'); }
+setInterval(tick,1000); tick();
+
+/* ===================== 自动刷新（实时同步数据源） ===================== */
+/* 后端调度器会周期性爬取新闻站点并写入共享库；前端按固定周期重新拉取当前视图，
+   使页面数据随时间自动与数据源保持同步（修复「页面数据不刷新」问题）。
+   点击右上角状态可立即触发一次刷新。 */
+const REFRESH_MS = 60000;            // 60 秒轮询一次
+let _refreshTimer = null;
+function nowStr(){ const d=new Date(); return d.toLocaleTimeString('zh-CN',{hour12:false}); }
+function markUpdated(){ const e=document.getElementById('lastUpdate'); if(e) e.textContent='上次更新 '+nowStr(); }
+async function refreshActive(){
+  const active = document.querySelector('.view.active');
+  const v = active ? active.dataset.view : 'dashboard';
+  try {
+    if(v==='dashboard') await loadDashboard();
+    else if(v==='news') await loadNews();
+    else if(v==='backtest') await loadBacktest();
+    else if(v==='stats') await loadStats();
+    else if(v==='settings') await loadSettings();
+    markUpdated();
+  } catch(e){ /* 单轮刷新失败不影响下一轮定时刷新 */ }
+}
+function startAutoRefresh(){
+  const s = document.getElementById('refreshStatus');
+  if(s) s.textContent = '自动刷新 '+(REFRESH_MS/1000)+'s';
+  if(_refreshTimer) clearInterval(_refreshTimer);
+  _refreshTimer = setInterval(refreshActive, REFRESH_MS);
+  if(s) s.addEventListener('click', ()=>{ if(s) s.textContent='刷新中…'; refreshActive(); });
+}
+
+/* ===================== Plotly 主题 ===================== */
+const FONT = 'Plus Jakarta Sans, -apple-system, PingFang SC, sans-serif';
+const baseLayout = {
+  paper_bgcolor:'rgba(0,0,0,0)', plot_bgcolor:'rgba(0,0,0,0)',
+  font:{family:FONT, size:12, color:'oklch(46% 0.018 65)'},
+  margin:{l:48,r:16,t:10,b:32},
+  xaxis:{gridcolor:'oklch(92% 0.01 82)', zeroline:false, linecolor:'oklch(89% 0.012 82)'},
+  yaxis:{gridcolor:'oklch(92% 0.01 82)', zeroline:false, linecolor:'oklch(89% 0.012 82)'},
+  showlegend:false, hovermode:'x unified'
+};
+const CFG = {displayModeBar:false, responsive:true};
+
+/* ===================== 仪表盘 ===================== */
+async function loadDashboard(){
+  const [market, signal, factors, news, stats, bt] = await Promise.allSettled([
+    api('/api/v1/market/price?range_hours=4h'),
+    api('/api/v1/signals/latest'),
+    api('/api/v1/factors'),
+    api('/api/v1/news?limit=20'),
+    api('/api/v1/stats/accuracy?window=7d'),
+    api('/api/v1/backtest/results'),
+  ]);
+  renderTicker(market, factors);
+  renderMarket(market);
+  renderSignal(signal);
+  renderNewsFeed(news);
+  renderSentiment(news);
+  renderFactors(factors);
+  renderAccMini(stats);
+  renderEqMini(bt);
+}
+
+function renderMarket(r){
+  const box = document.getElementById('quoteBox');
+  if(r.status==='rejected'){ box.innerHTML = stateError(r.reason, loadDashboard); return; }
+  const d = r.value;
+  if(!d || !d.prices || d.prices.length===0){ box.innerHTML = stateEmpty('暂无行情数据'); return; }
+  const up = d.change >= 0;
+  box.innerHTML =
+    '<h4>当前报价</h4>' +
+    '<div class="metric ' + (up?'c-bull':'c-bear') + '">' + fmt(d.current_price) + '<span class="u">USD/oz</span></div>' +
+    '<div class="sub">' + arrow(d.change) + ' ' + fmt(d.change) + ' (' + (up?'+':'') + fmt(d.change_pct) + '%) · 更新 ' + (d.timestamp||'').slice(11,16) + '</div>' +
+    '<hr style="border:0;border-top:1px dashed var(--line);margin:var(--s4) 0">' +
+    '<h4 style="margin-bottom:10px">关联指标</h4>' +
+    '<div class="grid" style="gap:var(--s3)" id="quoteRel"></div>';
+  // 关联指标由因子填充
+  const rel = document.getElementById('quoteRel');
+  if(rel && window._factors && window._factors.factors){
+    const f = name => (window._factors.factors.find(x=>x.name===name)||{});
+    const dxy=f('DXY'), vix=f('VIX');
+    rel.innerHTML =
+      '<div class="sub">美元指数 DXY <b class="' + (dxy.change>0?'c-bear':'c-bull') + '">' + fmt(dxy.value) + ' ' + arrow(dxy.change) + fmt(dxy.change) + '</b></div>' +
+      '<div class="sub">恐慌指数 VIX <b class="' + (vix.change>0?'c-bull':'c-bear') + '">' + fmt(vix.value) + ' ' + arrow(vix.change) + fmt(vix.change) + '</b></div>';
+  }
+  drawPrice(d);
+}
+
+function drawPrice(d){
+  // 横轴使用真实时间轴：当实时数据带来更晚的时间戳时，坐标轴范围会自动扩展滚动，
+  // 不再是固定不动的分类标签。解析失败时回退为 HH:MM 字符串标签。
+  const raw = d.prices.map(p => p.time || '');
+  const allDates = raw.length>0 && raw.every(s => s && !isNaN(Date.parse(s)));
+  const xs = allDates ? raw.map(s => Date.parse(s)) : raw.map(s => s.slice(11,16));
+  const p = d.prices.map(x => x.price);
+  const ma = p.map((_,i)=> i<30?null:p.slice(Math.max(0,i-29),i+1).reduce((s,x)=>s+x,0)/Math.min(i+1,30));
+  const xAxis = allDates
+    ? {...baseLayout.xaxis, type:'date', tickformat:'%H:%M', tickangle:-35, automargin:true, nticks:8, ticklabelmode:'period'}
+    : {...baseLayout.xaxis, type:'category', tickangle:-35, automargin:true, nticks:8};
+  const htMain = allDates ? '%{x|%H:%M}<br>XAU/USD %{y:.1f}<extra></extra>' : '%{x}<br>XAU/USD %{y:.1f}<extra></extra>';
+  const htMa = allDates ? '%{x|%H:%M}<br>MA30 %{y:.1f}<extra></extra>' : '%{x}<br>MA30 %{y:.1f}<extra></extra>';
+  Plotly.newPlot('priceChart',[
+    {x:xs,y:p,type:'scatter',mode:'lines',line:{color:'oklch(58% 0.115 75)',width:2},name:'XAU/USD',hovertemplate:htMain},
+    {x:xs,y:ma,type:'scatter',mode:'lines',line:{color:'oklch(62% 0.014 65)',width:1.4,dash:'dot'},name:'MA30',hovertemplate:htMa}
+  ],{...baseLayout,
+     xaxis:xAxis,
+     yaxis:{...baseLayout.yaxis, tickformat:'.1f'},  // 纵坐标统一保留 1 位小数
+     margin:{...baseLayout.margin, b:44}             // 加高底部留白，避免时间标签被截断
+  },CFG);
+}
+
+function renderTicker(marketR, factorsR){
+  const set=(id,html)=>{const e=document.getElementById(id); if(e) e.innerHTML=html;};
+  let xau='--', dxy='--', vix='--', tips='--', hawk='--', sent='--';
+  if(marketR.status==='fulfilled' && marketR.value){
+    const m=marketR.value; const up=m.change>=0;
+    xau='<span class="'+(up?'up':'down')+'">'+(up?'▲':'▼')+fmt(m.change_pct)+'%</span>';
+  }
+  if(factorsR.status==='fulfilled' && factorsR.value && factorsR.value.factors){
+    const f=name=>(factorsR.value.factors.find(x=>x.name===name)||{});
+    const fd=f('DXY'), fv=f('VIX'), ft=f('TIPS'), fh=f('hawk_dove'), fs=f('sentiment');
+    const cls=v=>(v>0?'up':'down');
+    const a=v=>arrow(v);
+    if(fd.value!=null) dxy='<span class="'+cls(fd.change)+'">'+a(fd.change)+fmt(fd.change)+'</span>';
+    if(fv.value!=null) vix='<span class="'+cls(fv.change)+'">'+a(fv.change)+fmt(fv.change)+'</span>';
+    if(ft.value!=null) tips='<span class="'+cls(ft.change)+'">'+a(ft.change)+fmt(ft.change)+'</span>';
+    if(fh.value!=null) hawk='<span class="'+cls(-fh.value)+'">'+(fh.value<0?'鹰派':'鸽派')+'</span>';
+    if(fs.value!=null) sent='<span class="'+(fs.value>=0?'up':'down')+'">'+fmt(fs.value)+'</span>';
+  }
+  set('tkXau',xau); set('tkDxy',dxy); set('tkVix',vix); set('tkTips',tips); set('tkHawk',hawk); set('tkSent',sent);
+  if(factorsR.status==='fulfilled') window._factors = factorsR.value; // 供关联指标复用
+}
+
+function renderSignal(r){
+  const box = document.getElementById('signalBox');
+  if(r.status==='rejected'){ box.innerHTML = stateError(r.reason, loadDashboard); return; }
+  const d = r.value;
+  if(!d){ box.innerHTML = stateEmpty('暂无信号（信号表为空）'); return; }
+  const cls = dirCls(d.direction_en);
+  const arrowDir = d.direction_en==='bullish'?'▲':(d.direction_en==='bearish'?'▼':'—');
+  const attr = (d.attribution && d.attribution.length)
+    ? d.attribution.map(a=>{
+        const c = inv(a.color); // 后端红=利空→绿，绿=利多→红
+        return '<div class="item"><span class="chip bg-'+c+' c-'+c+'">'+(c==='bull'?'🔴':(c==='bear'?'🟢':'⚪'))+'</span>'+
+          '<div class="body"><div class="t" style="font-size:13px">'+escapeHtml(a.factor)+'</div>'+
+          '<div class="m"><span>贡献 '+fmt(a.value)+'</span><span>'+escapeHtml(a.detail||'')+'</span></div></div></div>';
+      }).join('')
+    : '<div class="sub">无归因数据</div>';
+  box.innerHTML =
+    '<div class="signal '+(cls==='bear'?'bear':'')+'">' +
+      '<div class="k">当前交易信号</div>' +
+      '<div class="dir c-'+cls+'">'+escapeHtml(d.direction)+' '+arrowDir+'</div>' +
+      '<div class="prob">上涨概率 '+fmt(d.probability*100,0)+'% · 置信度 '+fmt(d.confidence_value)+'</div>' +
+      '<div class="facts">' +
+        '<div><div class="l">信号强度</div><div class="v">'+fmt(d.strength,0)+'</div></div>' +
+        '<div><div class="l">建议仓位</div><div class="v">'+escapeHtml(d.position||'--')+'</div></div>' +
+        '<div><div class="l">生成时间</div><div class="v" style="font-size:14px">'+((d.timestamp||'').slice(11,16)||'--')+'</div></div>' +
+      '</div>' +
+      '<details><summary>信号归因与引用溯源（可解释性）</summary>' +
+        '<div class="inner grid g-2" style="gap:var(--s3);margin-top:var(--s3)">' +
+          '<div><div class="muted" style="margin-bottom:8px;font-weight:600">因子贡献度（LightGBM 特征重要性）</div>' +
+            '<div class="feed">'+attr+'</div>' +
+          '</div>' +
+          '<div><div class="muted" style="margin-bottom:8px;font-weight:600">模型</div>' +
+            '<div class="sub">'+escapeHtml(d.model||'--')+'</div>' +
+            '<div class="sub" style="margin-top:6px">置信度：'+escapeHtml(d.confidence||'--')+'</div>' +
+          '</div>' +
+        '</div>' +
+      '</details>' +
+    '</div>';
+  // 评分卡
+  const sb = document.getElementById('scoreBox');
+  const score = d.bull_bear_score||0;
+  const label = score>=80?'强烈看多':score>=60?'偏多':score>=40?'中性':score>=20?'偏空':'强烈看空';
+  const scls = score>=60?'c-bull':(score<=39?'c-bear':'c-neutral');
+  sb.innerHTML =
+    '<h4>黄金多空评分 <span class="tag">0–100</span></h4>' +
+    '<div class="score"><div class="n '+scls+'">'+fmt(score,0)+'</div>' +
+      '<div style="flex:1"><div class="bar"><div class="knob" style="left:'+score+'%"></div></div>' +
+      '<div class="lab '+scls+'" style="margin-top:10px">'+label+'</div>' +
+      '<div class="muted" style="margin-top:8px;line-height:1.6">80–100 强烈看多 · 60–79 偏多 · 40–59 中性 · 20–39 偏空 · 0–19 强烈看空</div></div></div>';
+}
+
+function renderNewsFeed(r){
+  const box = document.getElementById('newsFeed');
+  if(r.status==='rejected'){ box.innerHTML = stateError(r.reason, loadDashboard); return; }
+  const list = r.value || [];
+  if(!list.length){ box.innerHTML = stateEmpty('暂无新闻'); return; }
+  box.innerHTML = '<div class="feed">' + list.map(n=>{
+    const c = n.sentiment==='bullish'?'bull':(n.sentiment==='bearish'?'bear':'neutral');
+    const emoji = c==='bull'?'🔴':(c==='bear'?'🟢':'⚪');
+    return '<div class="item"><span class="chip bg-'+c+' c-'+c+'">'+emoji+'</span>'+
+      '<div class="body"><div class="t">'+newsLink(n)+'</div>'+
+      '<div class="m"><span>'+escapeHtml(n.source||'')+'</span><span>topic <b>'+escapeHtml(n.topic||'')+'</b></span>'+
+      '<span class="c-'+c+'">'+fmt(n.sentiment_score)+'</span><span>'+((n.published_at||'').slice(11,16)||'')+'</span></div>'+
+      (n.key_sentence?'<div class="ks">“'+escapeHtml(n.key_sentence)+'”</div>':'')+'</div></div>';
+  }).join('') + '</div>';
+}
+
+function renderSentiment(r){
+  const el = document.getElementById('sentChart');
+  if(r.status==='rejected' || !r.value || !r.value.length){ Plotly.newPlot('sentChart',[{type:'bar',orientation:'h',x:[0,0,0],y:['利多','中性','利空'],marker:{color:['oklch(54% 0.15 25)','oklch(56% 0.012 65)','oklch(52% 0.12 155)']}}],{...baseLayout,margin:{l:48,r:16,t:10,b:20}},CFG); return; }
+  const cnt={bullish:0,bearish:0,neutral:0};
+  r.value.forEach(n=>{ if(cnt[n.sentiment]!=null) cnt[n.sentiment]++; });
+  Plotly.newPlot('sentChart',[{
+    type:'bar', orientation:'h',
+    x:[cnt.bullish, cnt.neutral, cnt.bearish], y:['利多','中性','利空'],
+    marker:{color:['oklch(54% 0.15 25)','oklch(56% 0.012 65)','oklch(52% 0.12 155)']},
+    text:[cnt.bullish, cnt.neutral, cnt.bearish], textposition:'auto'
+  }],{...baseLayout, margin:{l:48,r:16,t:10,b:20}, xaxis:{...baseLayout.xaxis,title:{text:'条'}}},CFG);
+}
+
+function renderFactors(r){
+  const box = document.getElementById('factorBox');
+  if(r.status==='rejected'){ box.innerHTML = stateError(r.reason, loadDashboard); return; }
+  const list = (r.value && r.value.factors) || [];
+  if(!list.length){ box.innerHTML = stateEmpty('暂无因子数据'); return; }
+  const pick = name => list.find(x=>x.name===name) || {};
+  const tile = (name,label,unit)=>{
+    const f = pick(name);
+    if(!f.value && f.value!==0) return '';
+    const c = inv(f.trend_color); // 后端利空红→前端绿，利多绿→前端红
+    const up = (f.change||0) > 0;
+    const sub = f.trend_color==='red' ? '利空黄金' : (f.trend_color==='green' ? '利多黄金' : '中性');
+    return '<div class="tile"><h4>'+label+' <span class="tag">'+unit+'</span></h4>'+
+      '<div class="metric">'+fmt(f.value)+(unit==='%'?'<span class="u">%</span>':'')+'</div>'+
+      '<div class="sub c-'+c+'">'+arrow(f.change)+' '+fmt(f.change)+' '+sub+'</div></div>';
+  };
+  box.innerHTML =
+    tile('DXY','DXY','美元') + tile('TIPS','TIPS 10Y','实际利率') +
+    tile('VIX','VIX','恐慌') + tile('sentiment','情感均值','情感');
+}
+
+function renderAccMini(r){
+  const el = document.getElementById('accMini');
+  let v7=62.5, v30=58.2;
+  if(r.status==='fulfilled' && r.value){ v7=r.value.overall_7d; v30=r.value.overall_30d; }
+  Plotly.newPlot('accMini',[
+    {x:['7d','30d'],y:[v7,v30],type:'bar',marker:{color:['oklch(58% 0.115 75)','oklch(54% 0.15 25)']},
+     text:[fmt(v7)+'%',fmt(v30)+'%'], textposition:'auto'}
+  ],{...baseLayout, margin:{l:40,r:12,t:8,b:24}, yaxis:{...baseLayout.yaxis,range:[0,100]}},CFG);
+}
+
+function renderEqMini(r){
+  const el = document.getElementById('eqMini');
+  if(r.status==='rejected' || !r.value || !r.value.equity_curve || !r.value.equity_curve.length){
+    Plotly.newPlot('eqMini',[{x:[],y:[],type:'scatter'}],{...baseLayout,margin:{l:40,r:12,t:8,b:24}},CFG); return;
+  }
+  const ec = r.value.equity_curve;
+  Plotly.newPlot('eqMini',[
+    {x:ec.map(p=>p.date), y:ec.map(p=>p.strategy), type:'scatter', mode:'lines',
+     line:{color:'oklch(58% 0.115 75)',width:2}, fill:'tozeroy', fillcolor:'oklch(58% 0.115 75 / .12)'}
+  ],{...baseLayout, margin:{l:40,r:12,t:8,b:24}, yaxis:{...baseLayout.yaxis,tickformat:'.0f'}},CFG);
+}
+
+/* ===================== 新闻中心 ===================== */
+async function loadNews(){
+  const [newsR, hawkR, dsR, sysR] = await Promise.allSettled([
+    api('/api/v1/news?limit=50'),
+    api('/api/v1/hawk-dove/events?days=30'),
+    api('/api/v1/system/data-sources'),
+    api('/api/v1/system/status'),
+  ]);
+  // 采集状态：数据源与存储信息取自后端，不再硬编码
+  const sb = document.getElementById('newsStatBox');
+  const n = (newsR.status==='fulfilled' && newsR.value) ? newsR.value.length : 0;
+  const dsList = (dsR.status==='fulfilled' && dsR.value) ? dsR.value : [];
+  const newsDs = dsList.find(x=>x.indicator_code==='news') || {};
+  const sentDs = dsList.find(x=>x.indicator_code==='sentiment') || {};
+  const sys = (sysR.status==='fulfilled' && sysR.value) ? sysR.value : {};
+  sb.innerHTML =
+    '<div class="tile"><h4>新闻数据源</h4><div class="metric" style="font-size:20px">'+escapeHtml(newsDs.source_name||'--')+'</div><div class="sub">'+escapeHtml(newsDs.description||'')+'</div></div>' +
+    '<div class="tile"><h4>采集频率</h4><div class="metric" style="font-size:20px">'+escapeHtml(newsDs.update_frequency||'--')+'</div><div class="sub">'+(newsDs.realtime?'实时轮询':'定时批量')+'</div></div>' +
+    '<div class="tile"><h4>当前样本量</h4><div class="metric">'+n+'</div><div class="sub">news 表 · URL 去重</div></div>' +
+    '<div class="tile"><h4>情感分析</h4><div class="metric" style="font-size:20px">'+escapeHtml(sentDs.source_name||'--')+'</div><div class="sub">存储 '+escapeHtml(sys.db_type||'--')+'</div></div>';
+  // 新闻流表格
+  const tb = document.getElementById('newsTableBox');
+  if(newsR.status==='rejected'){ tb.innerHTML = stateError(newsR.reason, loadNews); }
+  else {
+    const list = newsR.value || [];
+    if(!list.length){ tb.innerHTML = stateEmpty('暂无新闻'); }
+    else {
+      tb.innerHTML = '<table><thead><tr><th>标题</th><th>来源</th><th>主题</th><th>情感分</th><th>置信度</th><th>关键句</th></tr></thead><tbody>' +
+        list.map(n=>{
+          const c = n.sentiment==='bullish'?'bull':(n.sentiment==='bearish'?'bear':'neutral');
+          return '<tr><td>'+newsLink(n)+'</td><td>'+escapeHtml(n.source||'')+'</td><td>'+escapeHtml(n.topic||'')+'</td>'+
+            '<td><span class="pill bg-'+c+' c-'+c+'">'+fmt(n.sentiment_score)+'</span></td><td>'+fmt(n.confidence)+'</td>'+
+            '<td>“'+escapeHtml(n.key_sentence||'')+'”</td></tr>';
+        }).join('') + '</tbody></table>';
+    }
+  }
+  // 鹰鸽
+  const hb = document.getElementById('hawkFeed');
+  const hs = document.getElementById('hawkScore');
+  const hsub = document.getElementById('hawkSub');
+  const hrec = document.getElementById('hawkRecent');
+  if(hawkR.status==='rejected'){ hb.innerHTML = stateError(hawkR.reason, loadNews); hs.textContent='--'; hsub.textContent='加载失败'; }
+  else {
+    const list = hawkR.value || [];
+    if(!list.length){ hb.innerHTML = stateEmpty('暂无鹰鸽事件'); hs.textContent='--'; hsub.textContent='无数据'; }
+    else {
+      const latest = list[0];
+      const sc = latest.score || 0;
+      hs.innerHTML = '<span class="'+(sc<0?'c-bear':'c-bull')+'">'+fmt(sc)+'</span>';
+      hsub.textContent = (sc<0?'鹰派倾向 · 利空黄金':'鸽派倾向 · 利多黄金');
+      hrec.textContent = latest.speaker || '--';
+      hb.innerHTML = '<div class="feed">' + list.slice(0,8).map(e=>{
+        const c = e.score<0?'bear':'bull';
+        return '<div class="item"><span class="chip bg-'+c+' c-'+c+'">'+(e.score<0?'🟢':'🔴')+'</span>'+
+          '<div class="body"><div class="t" style="font-size:13.5px">'+escapeHtml(e.speaker||'')+' · '+escapeHtml(e.label||'')+'</div>'+
+          '<div class="m"><span>'+escapeHtml(e.date||'')+'</span><span class="c-'+c+'">'+fmt(e.score)+'</span></div>'+
+          '<div class="ks">'+escapeHtml(e.summary||'')+'</div></div></div>';
+      }).join('') + '</div>';
+    }
+  }
+}
+
+/* ===================== 回测分析 ===================== */
+async function loadBacktest(){
+  const r = await apiSafe('/api/v1/backtest/results', loadBacktest);
+  renderBacktest(r);
+  bindBacktest();
+}
+function apiSafe(path, retry){
+  return api(path).then(d=>({ok:true,d})).catch(e=>({ok:false,e}));
+}
+function renderBacktest(res){
+  const sumBox = document.getElementById('btSummaryBox');
+  const eq = document.getElementById('eqChart');
+  if(!res || !res.ok){ sumBox.innerHTML = stateError(res.e, loadBacktest); return; }
+  const bt = res.d;
+  const s = bt.summary || {};
+  if(!s.total_return_pct && s.total_return_pct!==0){ sumBox.innerHTML = stateEmpty('暂无回测结果，点击“运行回测”'); Plotly.newPlot('eqChart',[{x:[],y:[],type:'scatter'}],{...baseLayout,margin:{l:52,r:16,t:10,b:32}},CFG); return; }
+  const retCls = (s.total_return_pct||0) >= 0 ? 'c-bull' : 'c-bear';   // 国内习惯：红涨绿跌
+  const modeTag = s.data_mode==='real' ? '真实行情' : '演示数据';
+  sumBox.innerHTML =
+    '<div class="tile"><h4>累计收益率 <span class="tag">'+modeTag+'</span></h4><div class="metric '+retCls+'">'+fmt(s.total_return_pct)+'%</div><div class="sub">vs 买入持有 '+(s.benchmark_return_pct!=null?fmt(s.benchmark_return_pct)+'%':'--')+'</div></div>' +
+    '<div class="tile"><h4>夏普比率</h4><div class="metric">'+fmt(s.sharpe_ratio)+'</div><div class="sub">风险调整后收益</div></div>' +
+    '<div class="tile"><h4>最大回撤</h4><div class="metric c-bear">'+fmt(s.max_drawdown_pct)+'%</div><div class="sub">区间最大亏损</div></div>' +
+    '<div class="tile"><h4>胜率 / 盈亏比</h4><div class="metric">'+fmt(s.win_rate,0)+'<span class="u">/'+fmt(s.profit_loss_ratio)+'</span></div><div class="sub">共 '+(s.total_trades!=null?s.total_trades:0)+' 笔交易</div></div>';
+  drawEquity(bt.equity_curve || []);
+}
+function drawEquity(ec){
+  if(!ec.length){ Plotly.newPlot('eqChart',[{x:[],y:[],type:'scatter'}],{...baseLayout,margin:{l:52,r:16,t:10,b:32}},CFG); return; }
+  Plotly.newPlot('eqChart',[
+    {x:ec.map(p=>p.date), y:ec.map(p=>p.strategy), type:'scatter', mode:'lines', line:{color:'oklch(58% 0.115 75)',width:2.4}, name:'策略'},
+    {x:ec.map(p=>p.date), y:ec.map(p=>p.benchmark), type:'scatter', mode:'lines', line:{color:'oklch(62% 0.014 65)',width:1.6,dash:'dot'}, name:'买入持有'}
+  ],{...baseLayout, yaxis:{...baseLayout.yaxis,tickformat:'.0f'}, margin:{l:52,r:16,t:10,b:32}},CFG);
+}
+function num(id, dflt){
+  const el = document.getElementById(id);
+  const raw = String((el && el.value) || '').replace(/[,%\s]/g,'');
+  const v = parseFloat(raw);
+  return isFinite(v) ? v : dflt;
+}
+function readBacktestParams(){
+  const range = (document.getElementById('btRange')||{}).value || '3m';
+  const months = range==='1m' ? 1 : (range==='6m' ? 6 : 3);
+  const end = new Date();
+  const start = new Date(end.getTime());
+  start.setMonth(start.getMonth() - months);
+  const iso = d => d.toISOString().slice(0,10);
+  return {
+    start_date: iso(start),
+    end_date: iso(end),
+    initial_capital: num('btCapital', 10000),
+    spread: num('btSpread', 0.3),
+    commission_pct: num('btCommission', 0.01),
+    signal_threshold: num('btThreshold', 0.55),
+  };
+}
+function bindBacktest(){
+  const run = document.getElementById('runBt');
+  const exp = document.getElementById('exportBt');
+  const hint = document.getElementById('btHint');
+  if(run && !run._bound){ run._bound=true; run.addEventListener('click', async ()=>{
+    run.disabled=true; run.textContent='回测中…';
+    if(hint){ hint.textContent='正在按当前参数重新计算…'; hint.className='muted'; }
+    try{
+      const body = readBacktestParams();
+      // 直接使用 POST 返回的结果，避免再次拉取历史快照导致「参数无响应」
+      const bt = await api('/api/v1/backtest/run', {method:'POST', body:JSON.stringify(body)});
+      renderBacktest({ok:true, d:bt});
+      if(hint){
+        const s = (bt && bt.summary) || {};
+        hint.textContent = '已完成：共 '+(s.total_trades!=null?s.total_trades:0)+' 笔交易 · 阈值 '+body.signal_threshold+
+          ' · 点差 '+body.spread+' · 手续费 '+body.commission_pct+'%';
+      }
+    }catch(e){
+      const msg = (e && e.message) ? e.message : String(e);
+      if(hint){ hint.textContent = '回测失败：' + msg; hint.className='muted c-bear'; }
+    }
+    finally{ run.disabled=false; run.textContent='运行回测'; }
+  }); }
+  if(exp && !exp._bound){ exp._bound=true; exp.addEventListener('click', ()=>{
+    window.open(API_BASE + '/docs', '_blank'); // 文档入口；后端暂无导出端点
+  }); }
+}
+
+/* ===================== 准确率统计 ===================== */
+async function loadStats(){
+  const r = await apiSafe('/api/v1/stats/accuracy?window=30d', loadStats);
+  const box = document.getElementById('benchBox');
+  const dirFeed = document.getElementById('dirFeed');
+  if(!r.ok){ document.getElementById('accChart').innerHTML=''; box.innerHTML=stateError(r.e, loadStats); dirFeed.innerHTML=stateError(r.e, loadStats); return; }
+  const a = r.d;
+  drawAcc(a);
+  drawDir(a);
+  // 与基准对比（样本不足时明确标注，避免小样本高准确率误导）
+  const n30 = a.sample_30d || 0;
+  const weak = n30 > 0 && n30 < 30;
+  const sampleSub = n30 > 0
+    ? ('样本 '+n30+' 笔' + (weak ? ' · 样本偏小，仅供参考' : ''))
+    : '暂无交易样本';
+  box.innerHTML =
+    '<div class="tile"><h4>策略准确率</h4><div class="metric '+(weak?'c-neutral':'c-bull')+'">'+fmt(a.overall_30d)+'%</div><div class="sub">'+sampleSub+'</div></div>' +
+    '<div class="tile"><h4>随机方向基准</h4><div class="metric">50.0%</div><div class="sub">二分类理论基线</div></div>' +
+    '<div class="tile"><h4>超额</h4><div class="metric '+((a.overall_30d-50)>=0?'c-bull':'c-bear')+'">'+((a.overall_30d-50)>=0?'+':'')+fmt(a.overall_30d-50)+'pct</div><div class="sub">'+(a.data_mode==='real'?'基于真实行情回测':'基于演示数据')+'</div></div>';
+  // 按方向说明
+  const smp = n => (n!=null && n>0) ? ('样本 '+n+' 笔') : '暂无样本';
+  dirFeed.innerHTML = '<div class="feed">' +
+    '<div class="item"><span class="chip bg-bull c-bull">看</span><div class="body"><div class="t">看涨信号准确率 '+fmt(a.bullish_accuracy)+'%</div><div class="m"><span>'+smp(a.sample_bullish)+'</span></div></div></div>' +
+    '<div class="item"><span class="chip bg-bear c-bear">跌</span><div class="body"><div class="t">看跌信号准确率 '+fmt(a.bearish_accuracy)+'%</div><div class="m"><span>'+smp(a.sample_bearish)+'</span></div></div></div>' +
+    '<div class="item"><span class="chip bg-neutral c-neutral">望</span><div class="body"><div class="t">观望信号占比 '+fmt(a.neutral_accuracy)+'%</div><div class="m"><span>低于阈值不开仓</span></div></div></div>' +
+    '<div class="item"><span class="chip bg-neutral c-neutral">窗</span><div class="body"><div class="t">滚动窗口样本</div><div class="m"><span>7d '+smp(a.sample_7d)+'</span><span>30d '+smp(a.sample_30d)+'</span></div></div></div>' +
+    '</div>';
+}
+function drawAcc(a){
+  Plotly.newPlot('accChart',[
+    {x:['7d','30d'], y:[a.overall_7d, a.overall_30d], type:'bar',
+     marker:{color:['oklch(58% 0.115 75)','oklch(54% 0.15 25)']}, text:[fmt(a.overall_7d)+'%',fmt(a.overall_30d)+'%'], textposition:'auto'},
+    {x:['7d','30d'], y:[60,60], type:'scatter', mode:'lines', line:{color:'oklch(62% 0.014 65)',width:1.4,dash:'dash'}, name:'目标'}
+  ],{...baseLayout, yaxis:{...baseLayout.yaxis,range:[0,100],tickformat:'.0f'}, margin:{l:48,r:16,t:10,b:32}},CFG);
+}
+function drawDir(a){
+  Plotly.newPlot('dirChart',[{
+    type:'bar', x:['看涨','看跌','观望'], y:[a.bullish_accuracy, a.bearish_accuracy, a.neutral_accuracy],
+    marker:{color:['oklch(54% 0.15 25)','oklch(52% 0.12 155)','oklch(56% 0.012 65)']},
+    text:[fmt(a.bullish_accuracy)+'%',fmt(a.bearish_accuracy)+'%',fmt(a.neutral_accuracy)+'%'], textposition:'auto'
+  }],{...baseLayout, margin:{l:44,r:12,t:10,b:28}, yaxis:{...baseLayout.yaxis,range:[0,100],title:{text:'准确率 %'}}},CFG);
+}
+
+/* ===================== 系统设置 ===================== */
+async function loadSettings(){
+  const [sysR, statR, dsR] = await Promise.allSettled([
+    api('/api/v1/system/status'),
+    api('/api/v1/stats/accuracy?window=30d'),
+    api('/api/v1/system/data-sources'),
+  ]);
+  const box = document.getElementById('sysBox');
+  renderDataSources(dsR);
+  renderModelConfig(sysR);
+  renderSignalParams(sysR);
+  if(sysR.status==='rejected'){ box.innerHTML = stateError(sysR.reason, loadSettings); return; }
+  const s = sysR.value || {};
+  const acc = (statR.status==='fulfilled' && statR.value) ? statR.value.overall_30d : null;
+  const okCls = s.status==='ok' ? 'c-ok' : 'c-bear';
+  box.innerHTML =
+    '<div class="tile"><h4>数据采集状态</h4><div class="metric '+okCls+'" style="font-size:22px">'+(s.status==='ok'?'正常':'警告')+'</div><div class="sub">'+escapeHtml(s.data_collection||'')+'</div></div>' +
+    '<div class="tile"><h4>API 调用量</h4><div class="metric" style="font-size:22px">$'+fmt(s.api_usage? s.api_usage.today:0,1)+'</div><div class="sub">上限 $'+(s.api_usage? s.api_usage.limit:5)+'</div></div>' +
+    '<div class="tile"><h4>模型准确率</h4><div class="metric c-bull" style="font-size:22px">'+(acc!=null?fmt(acc)+'%':'--')+'</div><div class="sub">30 天滚动</div></div>' +
+    '<div class="tile"><h4>数据库</h4><div class="metric c-ok" style="font-size:22px">'+(s.db_connection==='正常'?'已连接':'异常')+'</div><div class="sub">'+escapeHtml(s.db_type||'--')+'</div></div>';
+}
+
+/* 数据源配置：完全由 /api/v1/system/data-sources 渲染 */
+function renderDataSources(dsR){
+  const box = document.getElementById('dsBox');
+  const note = document.getElementById('dsNote');
+  if(!box) return;
+  if(dsR.status==='rejected'){ box.innerHTML = stateError(dsR.reason, loadSettings); return; }
+  const list = dsR.value || [];
+  if(!list.length){ box.innerHTML = stateEmpty('暂无数据源配置'); return; }
+  box.innerHTML = '<table><thead><tr><th>指标</th><th>代码</th><th>数据来源</th><th>更新频率</th><th>实时性</th><th>说明</th></tr></thead><tbody>' +
+    list.map(d=>{
+      const rt = d.realtime ? '<span class="pill bg-bull c-bull">实时</span>' : '<span class="pill bg-neutral c-neutral">非实时</span>';
+      const src = d.source_url
+        ? '<a href="'+escapeHtml(d.source_url)+'" target="_blank" rel="noopener noreferrer">'+escapeHtml(d.source_name||'')+'</a>'
+        : escapeHtml(d.source_name||'');
+      return '<tr><td>'+escapeHtml(d.indicator_name||'')+'</td><td><code>'+escapeHtml(d.indicator_code||'')+'</code></td>'+
+        '<td>'+src+'</td><td>'+escapeHtml(d.update_frequency||'')+'</td><td>'+rt+'</td>'+
+        '<td>'+escapeHtml(d.description||'')+'</td></tr>';
+    }).join('') + '</tbody></table>';
+  if(note) note.textContent = '共 '+list.length+' 个数据源，清单由后端 data_sources 表维护，页面不再硬编码。';
+}
+
+/* 模型配置：由 /api/v1/system/status 的 model_info 渲染真实状态 */
+function renderModelConfig(sysR){
+  const box = document.getElementById('modelBox');
+  if(!box) return;
+  if(sysR.status==='rejected'){ box.innerHTML = stateError(sysR.reason, loadSettings); return; }
+  const mi = (sysR.value && sysR.value.model_info) || null;
+  if(!mi){ box.innerHTML = stateEmpty('后端未返回模型信息'); return; }
+  const stMap = {loaded:['已加载真实模型','c-bull'], synthetic_baseline:['合成基线模型（演示）','c-neutral'], unavailable:['模型不可用','c-bear']};
+  const st = stMap[mi.status] || [mi.status||'--','c-neutral'];
+  const inds = (mi.available_indicators||[]).map(x=>'<span class="pill bg-neutral c-neutral">'+escapeHtml(x)+'</span>').join(' ');
+  box.innerHTML =
+    '<div class="grid g-4">' +
+      '<div class="tile"><h4>模型名称</h4><div class="metric" style="font-size:18px">'+escapeHtml(mi.name||'--')+'</div><div class="sub">推理组合</div></div>' +
+      '<div class="tile"><h4>运行状态</h4><div class="metric '+st[1]+'" style="font-size:18px">'+escapeHtml(st[0])+'</div><div class="sub">'+(mi.is_real_model?'使用训练后的真实模型':'尚未接入训练模型')+'</div></div>' +
+      '<div class="tile"><h4>演示模式</h4><div class="metric" style="font-size:18px">'+(mi.demo_mode?'开启':'关闭')+'</div><div class="sub">'+(mi.demo_mode?'数据与信号为演示种子':'使用线上真实数据')+'</div></div>' +
+      '<div class="tile"><h4>默认信号阈值</h4><div class="metric" style="font-size:18px">'+fmt(mi.signal_threshold)+'</div><div class="sub">回测/信号生成共用</div></div>' +
+    '</div>' +
+    '<div class="muted" style="margin-top:var(--s3)">输入因子：'+(inds||'--')+'</div>';
+}
+
+/* 信号参数：阈值等取自后端 model_info，避免与实际不一致 */
+function renderSignalParams(sysR){
+  const box = document.getElementById('sigParamBox');
+  if(!box) return;
+  const mi = (sysR.status==='fulfilled' && sysR.value && sysR.value.model_info) || {};
+  const th = (mi.signal_threshold!=null) ? fmt(mi.signal_threshold) : '--';
+  box.innerHTML =
+    '<div class="field-row">' +
+      '<div><label>看涨触发阈值 P ≥</label><input value="'+th+'" disabled></div>' +
+      '<div><label>看跌触发阈值 1-P ≥</label><input value="'+th+'" disabled></div>' +
+      '<div><label>低于阈值</label><input value="观望（不开仓）" disabled></div>' +
+      '<div><label>参数来源</label><input value="后端 /system/status" disabled></div>' +
+    '</div>' +
+    '<div class="muted" style="margin-top:var(--s3)">阈值由后端统一下发；在「回测分析」中可临时调整阈值查看敏感性，不会写回系统配置。</div>';
+}
+
+/* 初始渲染仪表盘 + 启动自动刷新 */
+loadDashboard();
+startAutoRefresh();
+</script>
+</body>
+</html>

@@ -134,8 +134,8 @@ def get_sentiment_icon(sentiment: str) -> str:
         图标符号
     """
     icons = {
-        "bullish": "🟢",
-        "bearish": "🔴",
+        "bullish": "🔴",        # 涨/看多 = 红（涨红跌绿，与 frontend/dashboard.html 一致）
+        "bearish": "🟢",        # 跌/看空 = 绿（涨红跌绿，与 frontend/dashboard.html 一致）
         "neutral": "⚪"
     }
     return icons.get(sentiment, "⚪")
@@ -150,8 +150,8 @@ def get_direction_color(direction: str) -> str:
         十六进制颜色值
     """
     colors = {
-        "看涨": "#26a69a",
-        "看跌": "#ef5350",
+        "看涨": "#ef5350",      # 涨 = 红（涨红跌绿，与 frontend/dashboard.html 一致）
+        "看跌": "#26a69a",      # 跌 = 绿（涨红跌绿，与 frontend/dashboard.html 一致）
         "观望": "#787b86"
     }
     return colors.get(direction, "#9E9E9E")
@@ -252,8 +252,8 @@ def get_gauge_color(probability: float) -> str:
         十六进制颜色值
     """
     if probability >= 0.6:
-        return "#26a69a"
+        return "#ef5350"       # 高上涨概率 = 涨 = 红（涨红跌绿）
     elif probability >= 0.4:
-        return "#f0b90b"
+        return "#f0b90b"       # 中性 = 金
     else:
-        return "#ef5350"
+        return "#26a69a"       # 低上涨概率 = 跌 = 绿（涨红跌绿）

@@ -1,6 +1,6 @@
 """
-自定义 CSS 样式 — Wind/Bloomberg 终端风格
-深色主题 · 高数据密度 · 等宽数字 · 专业金融配色
+自定义 CSS 样式 — 终端深色风格（涨红跌绿，国内习惯）
+深色主题 · 高数据密度 · 等宽数字 · 涨红跌绿配色（以 frontend/dashboard.html 为准）
 """
 
 CUSTOM_CSS = """
@@ -18,8 +18,8 @@ CUSTOM_CSS = """
         --text-muted: #4f5564;
         --accent-gold: #f0b90b;
         --accent-blue: #2962ff;
-        --color-up: #26a69a;
-        --color-down: #ef5350;
+        --color-up: #ef5350;       /* 涨/看多 = 红（涨红跌绿，与 frontend/dashboard.html 一致）*/
+        --color-down: #26a69a;     /* 跌/看空 = 绿（涨红跌绿，与 frontend/dashboard.html 一致）*/
         --color-neutral: #787b86;
         --font-mono: 'SF Mono', 'Fira Code', 'JetBrains Mono', 'Consolas', 'Monaco', monospace;
         --font-sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif;

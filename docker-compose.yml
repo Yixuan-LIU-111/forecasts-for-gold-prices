@@ -1,0 +1,50 @@
+# 黄金价格预测系统 - 双容器编排
+# 启动：docker compose up --build
+# 默认 SQLite 模式开箱即用；启用 PostgreSQL 时取消 db 服务注释并设置 DATABASE_URL
+services:
+  api:
+    build: .
+    container_name: gold-predictor-api
+    ports:
+      - "8000:8000"
+    env_file:
+      - .env
+    environment:
+      - DATABASE_URL=sqlite:////app/data/gold_predictor.db
+      - DEMO_MODE=false
+    volumes:
+      - ./data:/app/data
+      - ./models:/app/models
+    restart: unless-stopped
+    # depends_on:
+    #   - db
+
+  # dashboard:
+  #   build: .
+  #   container_name: gold-predictor-dashboard
+  #   command: streamlit run app/dashboard/app.py --server.port 8501 --server.address 0.0.0.0
+  #   ports:
+  #     - "8501:8501"
+  #   env_file:
+  #     - .env
+  #   environment:
+  #     - DEMO_MODE=false
+  #   depends_on:
+  #     - api
+  #   restart: unless-stopped
+
+  # db:
+  #   image: postgres:16-alpine
+  #   container_name: gold-predictor-db
+  #   environment:
+  #     POSTGRES_USER: gold
+  #     POSTGRES_PASSWORD: gold
+  #     POSTGRES_DB: gold_predictor
+  #   ports:
+  #     - "5432:5432"
+  #   volumes:
+  #     - pgdata:/var/lib/postgresql/data
+  #   restart: unless-stopped
+
+# volumes:
+#   pgdata:

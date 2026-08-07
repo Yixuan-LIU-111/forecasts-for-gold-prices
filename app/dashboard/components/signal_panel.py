@@ -62,9 +62,9 @@ def render_signal_panel():
                 "borderwidth": 1,
                 "bordercolor": "#2a2e39",
                 "steps": [
-                    {"range": [0, 40], "color": "rgba(239,83,80,0.1)"},
-                    {"range": [40, 60], "color": "rgba(240,185,11,0.1)"},
-                    {"range": [60, 100], "color": "rgba(38,166,154,0.1)"}
+                    {"range": [0, 40], "color": "rgba(38,166,154,0.1)"},   # 低上涨概率 = 跌 = 绿
+                    {"range": [40, 60], "color": "rgba(240,185,11,0.1)"},  # 中性
+                    {"range": [60, 100], "color": "rgba(239,83,80,0.1)"}   # 高上涨概率 = 涨 = 红
                 ],
                 "threshold": {
                     "line": {"color": gauge_color, "width": 3},

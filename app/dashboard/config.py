@@ -26,10 +26,10 @@ class DashboardConfig:
     PAGE_TITLE: str = "点时成金 - 黄金价格30分钟方向预测系统"
     PAGE_ICON: str = "📈"
 
-    # 颜色方案 — 终端深色主题 (Wind/Bloomberg 风格)
+    # 颜色方案 — 终端深色主题；配色规则：涨红跌绿（国内习惯），以 frontend/dashboard.html 现有实现为准，颜色取值不变
     COLORS: Dict[str, str] = field(default_factory=lambda: {
-        "bullish": "#26a69a",       # 看涨/利多 — 青绿色
-        "bearish": "#ef5350",       # 看跌/利空 — 珊瑚红
+        "bullish": "#ef5350",       # 看涨/利多 — 红（涨红跌绿，与 frontend/dashboard.html 一致）
+        "bearish": "#26a69a",       # 看跌/利空 — 绿（涨红跌绿，与 frontend/dashboard.html 一致）
         "neutral": "#787b86",       # 中性/观望 — 暗灰
         "bg_dark": "#0a0e1a",       # 主背景 — 深蓝黑
         "bg_light": "#131722",      # 次背景 — 深灰蓝
@@ -46,8 +46,8 @@ class DashboardConfig:
         "chart_line": "#2962ff",    # 图表主线色 — 蓝
         "chart_ma": "#f0b90b",      # 移动平均线色 — 金
         "chart_volume": "#2a2e39",  # 成交量柱色 — 暗灰
-        "profit": "#26a69a",        # 盈利色
-        "loss": "#ef5350",          # 亏损色
+        "profit": "#ef5350",        # 盈利色（涨红跌绿：盈利=红）
+        "loss": "#26a69a",          # 亏损色（涨红跌绿：亏损=绿）
     })
 
 

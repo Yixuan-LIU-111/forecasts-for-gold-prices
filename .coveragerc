@@ -1,0 +1,36 @@
+# ============================================================
+# 覆盖率统计配置（coverage.py / pytest-cov 共用）
+# ============================================================
+[run]
+source = app
+branch = True
+parallel = False
+omit =
+    # 独立可视化外壳：Streamlit 组件依赖运行时上下文，单测收益低
+    app/dashboard/*
+    # 依赖注入/包初始化样板
+    */__init__.py
+    # 一次性数据引导脚本（由集成测试间接覆盖）
+    app/core/bootstrap_data.py
+
+[report]
+# 排除无需覆盖的行
+exclude_lines =
+    pragma: no cover
+    def __repr__
+    if __name__ == .__main__.:
+    raise NotImplementedError
+    if TYPE_CHECKING:
+    @abstractmethod
+    \.\.\.
+precision = 2
+show_missing = True
+skip_covered = False
+sort = Cover
+
+[html]
+directory = reports/coverage-html
+title = 点时成金 · 后端覆盖率报告
+
+[xml]
+output = reports/coverage.xml
