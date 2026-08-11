@@ -3,6 +3,9 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
+<meta http-equiv="Pragma" content="no-cache" />
+<meta http-equiv="Expires" content="0" />
 <title>点时成金 · 黄金 30 分钟方向预测系统</title>
 <!-- 图表引擎：与方案技术栈一致（Plotly 交互式图表） -->
 <script src="https://cdn.plot.ly/plotly-2.35.2.min.js" charset="utf-8"></script>
@@ -95,6 +98,27 @@
 
   /* ---------- 模块一外壳：右工作画布 ---------- */
   .canvas{display:flex;flex-direction:column;min-width:0}
+  /* —— 顶栏运行模式标识 —— */
+  .mode-badge{display:inline-flex;align-items:center;font-size:12px;font-weight:600;padding:5px 11px;border-radius:30px}
+  .mode-badge.demo{color:oklch(50% 0.13 70);background:oklch(94% 0.06 70)}
+  .mode-badge.live{color:oklch(40% 0.12 155);background:oklch(94% 0.05 155)}
+  /* —— 系统设置·模型配置中的演示模式开关 —— */
+  .mc-switch{display:inline-flex;align-items:center;gap:10px;cursor:pointer;margin-top:4px}
+  .mc-switch .ds-state{font-size:16px;font-weight:700}
+  .ds-state.on{color:oklch(50% 0.13 70)}
+  .ds-state.off{color:oklch(40% 0.12 155)}
+  .switch{position:relative;display:inline-block;width:38px;height:20px}
+  .switch input{opacity:0;width:0;height:0}
+  .switch .slider{position:absolute;inset:0;background:oklch(80% 0.02 82);border-radius:999px;transition:.2s;cursor:pointer}
+  .switch .slider:before{content:"";position:absolute;height:16px;width:16px;left:2px;top:2px;background:#fff;border-radius:50%;transition:.2s;box-shadow:0 1px 2px rgba(0,0,0,.2)}
+  .switch input:checked + .slider{background:oklch(70% 0.13 70)}
+  .switch input:checked + .slider:before{transform:translateX(18px)}
+  /* —— 轻量提示 —— */
+  .toast{position:fixed;left:50%;bottom:28px;transform:translateX(-50%) translateY(20px);background:oklch(30% 0.02 65);color:#fff;padding:10px 18px;border-radius:10px;font-size:14px;opacity:0;pointer-events:none;transition:.25s;z-index:99;box-shadow:0 8px 24px rgba(0,0,0,.18)}
+  .toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+  .toast.ok{background:oklch(52% 0.13 155)}
+  .toast.warn{background:oklch(60% 0.14 70)}
+  .toast.err{background:oklch(55% 0.18 25)}
   .topbar{display:flex;align-items:center;gap:var(--s4);padding:var(--s4) var(--s6);
     border-bottom:1px solid var(--line);background:var(--surface)}
   .topbar h1{font-family:var(--serif);font-size:21px;font-weight:600;margin:0;letter-spacing:.2px}
@@ -279,6 +303,7 @@
       <h1 id="pageTitle">实时仪表盘</h1>
       <span class="crumb" id="pageCrumb">可视化仪表盘</span>
       <span class="spacer"></span>
+      <span class="mode-badge demo" id="topbarMode">演示模式</span>
       <span class="status" id="refreshStatus" title="点击立即刷新">实时刷新中…</span>
       <span class="clock" id="clock">--:--:--</span>
       <span class="muted" id="lastUpdate"></span>
@@ -562,6 +587,17 @@ function stateError(err, retry) {
   return html;
 }
 function stateEmpty(msg) { return '<div class="state"><div class="empty">' + (msg || '暂无数据') + '</div></div>'; }
+
+/* 轻量提示 toast */
+let _toastTimer = null;
+function toast(msg, kind) {
+  let t = document.getElementById('toast');
+  if (!t) { t = document.createElement('div'); t.id = 'toast'; t.className = 'toast'; document.body.appendChild(t); }
+  t.textContent = msg;
+  t.className = 'toast show' + (kind ? (' ' + kind) : '');
+  clearTimeout(_toastTimer);
+  _toastTimer = setTimeout(() => { t.className = 'toast'; }, 2600);
+}
 function escapeHtml(s) { return String(s).replace(/[&<>"']/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c])); }
 function fmt(n, d = 2) { return (n == null || isNaN(n)) ? '--' : Number(n).toFixed(d); }
 function arrow(v) { return v > 0 ? '▲' : (v < 0 ? '▼' : '—'); }
@@ -1109,10 +1145,18 @@ function renderModelConfig(sysR){
     '<div class="grid g-4">' +
       '<div class="tile"><h4>模型名称</h4><div class="metric" style="font-size:18px">'+escapeHtml(mi.name||'--')+'</div><div class="sub">推理组合</div></div>' +
       '<div class="tile"><h4>运行状态</h4><div class="metric '+st[1]+'" style="font-size:18px">'+escapeHtml(st[0])+'</div><div class="sub">'+(mi.is_real_model?'使用训练后的真实模型':'尚未接入训练模型')+'</div></div>' +
-      '<div class="tile"><h4>演示模式</h4><div class="metric" style="font-size:18px">'+(mi.demo_mode?'开启':'关闭')+'</div><div class="sub">'+(mi.demo_mode?'数据与信号为演示种子':'使用线上真实数据')+'</div></div>' +
+      '<div class="tile"><h4>演示模式</h4>'+
+        '<label class="mc-switch" title="演示模式：开启时价格/信号使用演示种子；关闭后由调度器实时采集外部市场数据">'+
+          '<span class="switch"><input type="checkbox" id="demoToggle" '+(mi.demo_mode?'checked':'')+' aria-label="切换演示模式"><span class="slider"></span></span>'+
+          '<span class="ds-state '+(mi.demo_mode?'on':'off')+'" id="demoState">'+(mi.demo_mode?'开启':'关闭')+'</span>'+
+        '</label>'+
+        '<div class="sub">'+(mi.demo_mode?'数据与信号为演示种子':'使用线上真实数据')+'</div>'+
+      '</div>' +
       '<div class="tile"><h4>默认信号阈值</h4><div class="metric" style="font-size:18px">'+fmt(mi.signal_threshold)+'</div><div class="sub">回测/信号生成共用</div></div>' +
     '</div>' +
     '<div class="muted" style="margin-top:var(--s3)">输入因子：'+(inds||'--')+'</div>';
+  // 每次重绘模型配置瓦片后，重新给其中的演示模式开关绑定事件
+  wireDemoToggle();
 }
 
 /* 信号参数：阈值等取自后端 model_info，避免与实际不一致 */
@@ -1131,9 +1175,55 @@ function renderSignalParams(sysR){
     '<div class="muted" style="margin-top:var(--s3)">阈值由后端统一下发；在「回测分析」中可临时调整阈值查看敏感性，不会写回系统配置。</div>';
 }
 
+/* ===================== 演示模式开关 ===================== */
+/* 控制后端 settings.demo_mode 运行时切换：开启→演示种子，关闭→调度器实时采集。
+   改动经 POST /api/v1/system/demo-mode 写回后端并持久化，前端只负责触发与呈现。 */
+let _demoBusy = false;
+function setDemoUI(on) {
+  const tg = document.getElementById('demoToggle');
+  if (tg) tg.checked = on;
+  const st = document.getElementById('demoState');
+  if (st) { st.textContent = on ? '开启' : '关闭'; st.className = 'ds-state ' + (on ? 'on' : 'off'); }
+  const tm = document.getElementById('topbarMode');
+  if (tm) { tm.textContent = on ? '演示模式' : '实时模式'; tm.className = 'mode-badge ' + (on ? 'demo' : 'live'); }
+}
+function wireDemoToggle() {
+  const tg = document.getElementById('demoToggle');
+  if (tg && !tg._demoWired) {
+    tg.addEventListener('change', e => applyDemoMode(e.target.checked));
+    tg._demoWired = true;
+  }
+}
+async function loadDemoMode() {
+  try {
+    const d = await api('/api/v1/system/demo-mode');
+    setDemoUI(!!d.enabled);
+  } catch (e) { /* 加载失败不阻塞页面 */ }
+}
+async function applyDemoMode(enabled) {
+  if (_demoBusy) return;
+  _demoBusy = true;
+  try {
+    const d = await api('/api/v1/system/demo-mode', {
+      method: 'POST', body: JSON.stringify({ enabled }),
+    });
+    const on = !!d.enabled;
+    setDemoUI(on);
+    toast((on ? '已切换到演示模式' : '已切换到实时模式') + (d.persistent ? '（已持久化）' : ''), on ? 'warn' : 'ok');
+    // 重渲染当前视图，使模式相关面板（如系统设置·模型配置）同步；
+    // renderModelConfig 内部会调用 wireDemoToggle() 绑定新 input 事件。
+    refreshActive();
+  } catch (e) {
+    toast('切换失败：' + (e.message || e), 'err');
+    // 回滚开关与状态显示
+    setDemoUI(!enabled);
+  } finally { _demoBusy = false; }
+}
+
 /* 初始渲染仪表盘 + 启动自动刷新 */
 loadDashboard();
 startAutoRefresh();
+loadDemoMode();
 </script>
 </body>
 </html>

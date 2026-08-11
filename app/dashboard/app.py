@@ -16,10 +16,10 @@ Streamlit 主入口文件
 import os
 import sys
 
-# 将项目根目录加入 sys.path
-PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-if PROJECT_ROOT not in sys.path:
-    sys.path.insert(0, PROJECT_ROOT)
+# 将项目根目录加入 sys.path（兼容开发与 PyInstaller 打包环境）
+from app.frozen import PROJECT_ROOT
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
 
 import streamlit as st
 from streamlit_autorefresh import st_autorefresh

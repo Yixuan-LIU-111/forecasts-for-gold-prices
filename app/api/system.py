@@ -1,7 +1,9 @@
 """系统状态端点。"""
+import logging
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends
+from pydantic import BaseModel
 from sqlalchemy import select, func
 from sqlalchemy.orm import Session
 
@@ -13,6 +15,57 @@ from app.models.schemas import (
 from app.api.deps import serialize_data_sources
 
 router = APIRouter(prefix="/api/v1/system", tags=["system"])
+
+logger = logging.getLogger(__name__)
+
+
+class DemoModeIn(BaseModel):
+    """切换演示模式的请求体。"""
+    enabled: bool
+
+
+def _persist_demo_mode(enabled: bool) -> bool:
+    """将 demo_mode 写回 .env 的 DEMO_MODE 行，使服务重启后仍生效。失败不影响本次运行。"""
+    from app.frozen import DOT_ENV_PATH
+
+    key = "DEMO_MODE"
+    val = "true" if enabled else "false"
+    try:
+        p = DOT_ENV_PATH
+        if p.exists():
+            lines = p.read_text(encoding="utf-8").splitlines()
+            out, replaced = [], False
+            for ln in lines:
+                stripped = ln.strip().upper()
+                if stripped.startswith(key + "=") or stripped == key:
+                    out.append(f"{key}={val}")
+                    replaced = True
+                else:
+                    out.append(ln)
+            if not replaced:
+                out.append(f"{key}={val}")
+            p.write_text("\n".join(out) + "\n", encoding="utf-8")
+        else:
+            p.write_text(f"{key}={val}\n", encoding="utf-8")
+        return True
+    except Exception as e:  # noqa: BLE001
+        logger.warning("demo_mode 持久化失败（不影响本次运行）: %s", e)
+        return False
+
+
+def _is_demo_mode_persisted() -> bool:
+    """判断 .env 是否含 DEMO_MODE 行（即本次设置已被持久化）。"""
+    from app.frozen import DOT_ENV_PATH
+
+    try:
+        if not DOT_ENV_PATH.exists():
+            return False
+        return any(
+            (ln.strip().upper().startswith("DEMO_MODE=") or ln.strip().upper() == "DEMO_MODE")
+            for ln in DOT_ENV_PATH.read_text(encoding="utf-8").splitlines()
+        )
+    except Exception:  # noqa: BLE001
+        return False
 
 
 def _db_type() -> str:
@@ -91,3 +144,45 @@ def get_data_sources(db: Session = Depends(get_db)):
     """返回各指标对应的真实采集源（数据源配置面板使用）。"""
     rows = serialize_data_sources(db)
     return ApiResponse.ok([DataSourceOut(**r).model_dump() for r in rows])
+
+
+@router.get("/demo-mode", response_model=ApiResponse)
+def get_demo_mode():
+    """读取当前 demo 模式状态与调度任务清单。"""
+    jobs = []
+    try:
+        from app.core.scheduler import get_scheduler_jobs
+
+        jobs = get_scheduler_jobs()
+    except Exception:  # noqa: BLE001
+        pass
+    return ApiResponse.ok({
+        "enabled": settings.demo_mode,
+        "scheduler_jobs": jobs,
+        "persistent": _is_demo_mode_persisted(),
+    })
+
+
+@router.post("/demo-mode", response_model=ApiResponse)
+def set_demo_mode(body: DemoModeIn):
+    """运行时切换 demo 模式并持久化。
+
+    - 写入 settings.demo_mode（进程级单例，立即生效）
+    - 同步重配置调度器：实时模式挂载采集/信号任务，演示模式卸载
+    - 写回 .env 的 DEMO_MODE 行，服务重启后仍保持
+    """
+    settings.demo_mode = bool(body.enabled)
+    persistent = _persist_demo_mode(settings.demo_mode)
+    jobs = []
+    try:
+        from app.core.scheduler import reconfigure_scheduler
+
+        jobs = reconfigure_scheduler().get("jobs", [])
+    except Exception as e:  # noqa: BLE001
+        logger.warning("调度器重配置失败（demo_mode 已切换）: %s", e)
+    return ApiResponse.ok({
+        "enabled": settings.demo_mode,
+        "scheduler_jobs": jobs,
+        "persistent": persistent,
+        "mode": "演示模式" if settings.demo_mode else "实时模式",
+    })

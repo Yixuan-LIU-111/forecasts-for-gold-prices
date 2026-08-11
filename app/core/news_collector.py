@@ -24,11 +24,13 @@ from sqlalchemy import select
 
 from app.core.data_collector import DataCollector
 from app.core.title_summary import summarize_title
+from app.frozen import get_scraper_root
 from app.models.database import SessionLocal
 from app.models.tables import News
 
 # 仓库根目录（与 news_scraper_llm 同级），保证可从任意工作目录导入现有爬虫
-_ROOT = Path(__file__).resolve().parent.parent.parent
+# 开发环境 = 仓库根目录，PyInstaller 打包环境 = _MEIPASS 解压目录
+_ROOT = get_scraper_root()
 if str(_ROOT) not in sys.path:
     sys.path.insert(0, str(_ROOT))
 

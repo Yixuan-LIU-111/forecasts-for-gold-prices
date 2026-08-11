@@ -15,9 +15,9 @@ import logging
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
-from pathlib import Path
 
 from app.config import settings
+from app.frozen import get_frontend_html, ensure_runtime_dirs, IS_FROZEN
 from app.core.seed import init_app
 from app.api import (
     signals, market, factors, news, backtest, stats, hawk_dove, system,
@@ -58,7 +58,9 @@ app.include_router(system.router)
 @app.on_event("startup")
 def on_startup() -> None:
     """启动时初始化数据库 + 种子数据，并按配置启动后台调度器。"""
-    logger.info("启动应用，DEMO_MODE=%s，SCHEDULER_ENABLED=%s", settings.demo_mode, settings.scheduler_enabled)
+    ensure_runtime_dirs()
+    logger.info("启动应用，DEMO_MODE=%s，SCHEDULER_ENABLED=%s，IS_FROZEN=%s",
+                settings.demo_mode, settings.scheduler_enabled, IS_FROZEN)
     init_app()
     # 启动后台调度器：由 SCHEDULER_ENABLED 控制总开关。
     # 调度器内部会在 demo 模式下也挂载「新闻实时爬取」任务（不依赖付费外部 API），
@@ -90,14 +92,21 @@ def on_shutdown() -> None:
 
 
 # 同源托管前端页面：让预览/浏览器与 API 处于同一 origin，避免跨 localhost 取数失败
-_FRONTEND_HTML = Path(__file__).resolve().parent.parent / "frontend" / "dashboard.html"
+_FRONTEND_HTML = get_frontend_html()
+
+# 前端页面缓存控制：避免浏览器缓存 dashboard.html，导致后续前端改动发布后用户仍看到旧版
+_NO_CACHE_HEADERS = {
+    "Cache-Control": "no-cache, no-store, must-revalidate",
+    "Pragma": "no-cache",
+    "Expires": "0",
+}
 
 
 @app.get("/", tags=["ui"])
 @app.get("/dashboard", tags=["ui"])
 @app.get("/dashboard.html", tags=["ui"])
 def serve_dashboard():
-    return FileResponse(_FRONTEND_HTML)
+    return FileResponse(_FRONTEND_HTML, headers=_NO_CACHE_HEADERS)
 
 
 @app.get("/health", tags=["root"])

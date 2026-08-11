@@ -22,9 +22,10 @@ import pandas as pd
 from sqlalchemy.orm import Session
 
 from app.core.data_collector import DataCollector, store_market_data, _dialect_insert
+from app.frozen import get_scraper_root
 from app.models.tables import EconomicCalendar, MarketData
 
-_SCRAPER_ROOT = Path(__file__).resolve().parents[2]  # 仓库根目录
+_SCRAPER_ROOT = get_scraper_root()  # 仓库根目录（打包环境 = _MEIPASS）
 
 
 # --------------------------------------------------------------------------- #

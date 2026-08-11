@@ -109,12 +109,16 @@ def _llm_analyze(title: str, content: str = "") -> Optional[SentimentResult]:
         from langchain_openai import ChatOpenAI
         from langchain_core.messages import HumanMessage, SystemMessage
 
-        llm = ChatOpenAI(
+        _kwargs = dict(
             model=settings.openai_model,
             temperature=0,
             api_key=settings.openai_api_key,
             max_tokens=300,
         )
+        # 兼容 OpenAI 兼容网关（如阿里云百炼 qwen 系列）
+        if getattr(settings, "openai_base_url", ""):
+            _kwargs["base_url"] = settings.openai_base_url
+        llm = ChatOpenAI(**_kwargs)
         sys = SystemMessage(
             content=(
                 "你是黄金市场新闻分析助手。对新闻标题+摘要输出 JSON："

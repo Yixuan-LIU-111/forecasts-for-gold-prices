@@ -7,6 +7,7 @@
   又提供 forecasts-for-gold-prices-main 后端所需的 lowercase 字段与派生属性
   （database_url / is_sqlite / demo_mode / api_host / api_port / openai_* 等）。
 - 大写字段以小写 canonical 字段的 @property 别名形式暴露，旧代码无需改动。
+- 路径管理已迁移至 app.frozen 模块，同时兼容开发与 PyInstaller 打包环境。
 """
 from __future__ import annotations
 
@@ -15,11 +16,20 @@ from pathlib import Path
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-# 项目根目录：app/config.py 的上两级
-PROJECT_ROOT = Path(__file__).resolve().parent.parent
-DEMO_DATA_DIR = PROJECT_ROOT / "app" / "dashboard" / "demo_data"
-DATA_DIR = PROJECT_ROOT / "data"
-MODELS_DIR = PROJECT_ROOT / "models"
+from app.frozen import (
+    PROJECT_ROOT,
+    EXE_DIR,
+    DATA_DIR,
+    MODELS_DIR,
+    DEMO_DATA_DIR,
+    DOT_ENV_PATH,
+    IS_FROZEN,
+    ensure_runtime_dirs,
+)
+
+# 向后兼容：其他模块仍从 app.config 导入 PROJECT_ROOT
+__all__ = ["PROJECT_ROOT", "EXE_DIR", "DATA_DIR", "MODELS_DIR", "DEMO_DATA_DIR",
+           "DOT_ENV_PATH", "IS_FROZEN", "ensure_runtime_dirs", "Settings", "get_settings", "settings"]
 
 
 class Settings(BaseSettings):
@@ -29,7 +39,7 @@ class Settings(BaseSettings):
     """
 
     model_config = SettingsConfigDict(
-        env_file=str(PROJECT_ROOT / ".env"),
+        env_file=str(DOT_ENV_PATH),
         env_file_encoding="utf-8",
         extra="ignore",
     )
@@ -49,6 +59,8 @@ class Settings(BaseSettings):
     # —— LLM（main 后端）——
     openai_api_key: str = ""
     openai_model: str = "gpt-4o-mini"
+    # OpenAI 兼容网关地址（如阿里云百炼 qwen 系列）；为空则用官方默认端点
+    openai_base_url: str = ""
     llm_daily_budget_usd: float = 5.0
 
     # —— 新闻（main 后端）——
@@ -124,12 +136,47 @@ class Settings(BaseSettings):
         return self.log_level
 
 
+def _load_scraper_llm_env() -> dict[str, str]:
+    """读取 news_scraper_llm/.env 中的 OPENAI_* 配置（不复制密钥，只共享同一份来源）。
+
+    背景：LLM 凭据此前只配置在爬虫子项目里，导致 app 侧 has_openai=False，
+    中文标题/情感分析只能走规则降级。此处作为兜底来源读取，保持单一密钥来源。
+    仅在 app 自身未配置时生效，app 级 .env 或环境变量始终优先。
+    """
+    env_path = PROJECT_ROOT / "news_scraper_llm" / ".env"
+    if not env_path.exists():
+        return {}
+    out: dict[str, str] = {}
+    try:
+        for line in env_path.read_text(encoding="utf-8").splitlines():
+            line = line.strip()
+            if not line or line.startswith("#") or "=" not in line:
+                continue
+            key, _, val = line.partition("=")
+            key = key.strip().upper()
+            if key in {"OPENAI_API_KEY", "OPENAI_MODEL", "OPENAI_BASE_URL"}:
+                out[key] = val.strip().strip('"').strip("'")
+    except Exception:  # noqa: BLE001 - 配置读取失败不应阻断启动
+        return {}
+    return out
+
+
 @lru_cache
 def get_settings() -> Settings:
     """返回进程级配置单例（main 风格：启动时确保目录存在）。"""
-    DATA_DIR.mkdir(parents=True, exist_ok=True)
-    MODELS_DIR.mkdir(parents=True, exist_ok=True)
-    return Settings()
+    ensure_runtime_dirs()
+    s = Settings()
+
+    # app 未配置 LLM 时，回退复用爬虫子项目的 OpenAI 兼容配置
+    if not s.openai_api_key:
+        scraper_env = _load_scraper_llm_env()
+        if scraper_env.get("OPENAI_API_KEY"):
+            s.openai_api_key = scraper_env["OPENAI_API_KEY"]
+            if scraper_env.get("OPENAI_MODEL"):
+                s.openai_model = scraper_env["OPENAI_MODEL"]
+            if scraper_env.get("OPENAI_BASE_URL"):
+                s.openai_base_url = scraper_env["OPENAI_BASE_URL"]
+    return s
 
 
 # 全局可导入的配置实例（app 各模块统一从此处取用）

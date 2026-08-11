@@ -221,12 +221,16 @@ def llm_summarize(title: str, key_sentence: str = "") -> Optional[str]:
         from langchain_openai import ChatOpenAI
         from langchain_core.messages import HumanMessage, SystemMessage
 
-        llm = ChatOpenAI(
+        kwargs = dict(
             model=settings.openai_model,
             temperature=0,
             api_key=settings.openai_api_key,
             max_tokens=120,
         )
+        # 兼容 OpenAI 兼容网关（如阿里云百炼 qwen 系列）
+        if getattr(settings, "openai_base_url", ""):
+            kwargs["base_url"] = settings.openai_base_url
+        llm = ChatOpenAI(**kwargs)
         sys = SystemMessage(
             content=(
                 "你是黄金市场新闻标题生成助手。请将下面的新闻（标题与关键句）概括成"
@@ -268,3 +272,62 @@ def summarize_title(
     if zh:
         return _trim(zh)
     return rule_summarize(title, key_sentence, sentiment, topic)
+
+
+# 规则降级产出的低信息量标题特征：可在 LLM 可用时被升级重写
+_BARE_DIRECTION = {"上涨", "下跌", "突破", "回落", "上涨至", "下跌至", "回落至"}
+
+
+def _is_low_quality(zh: str) -> bool:
+    """判断中文标题是否为规则兜底产出的低信息量文案（可被 LLM 结果覆盖）。
+
+    仅命中「XX 相关动态」与裸方向词两类兜底模板；人工撰写的种子标题
+    （如「SPDR黄金ETF持仓量增加2.5吨，创近一个月新高」）不会被误判。
+    """
+    s = (zh or "").strip()
+    if not s:
+        return True
+    return s.endswith("相关动态") or s in _BARE_DIRECTION
+
+
+def backfill_missing_title_zh(db, limit: int = 200) -> int:
+    """补齐/升级 title_zh 中文概括标题，返回更新行数。
+
+    背景：外部实时爬虫 news_scraper_llm 直接写共享的 news 表（见其 db.py
+    `_get_or_create_news`），不产出 title_zh，会绕过 app 内的标题生成链路，
+    导致前端出现英文标题。本函数作为**统一收口**，在爬取任务结束后补齐。
+
+    处理范围（三类）：
+      1. title_zh 为空 → 生成；
+      2. title_zh 仍是英文（旧逻辑回退自 title）→ 重写为中文；
+      3. title_zh 是规则兜底的低信息量文案且当前 LLM 可用 → 升级为 LLM 摘要。
+
+    幂等：已是中文且非兜底模板的标题（含人工 demo 种子）一律跳过。
+    """
+    from sqlalchemy import select
+
+    from app.models.database import News
+
+    rows = (
+        db.execute(select(News).order_by(News.id.desc()).limit(limit))
+        .scalars()
+        .all()
+    )
+
+    upgradable = settings.has_openai  # 无 LLM 时不重算兜底文案，避免无谓开销
+    updated = 0
+    for n in rows:
+        current = (n.title_zh or "").strip()
+        if current and _is_chinese(current):
+            if not (upgradable and _is_low_quality(current)):
+                continue  # 已是合格中文标题，保留原样
+        zh = summarize_title(
+            n.title or "", n.key_sentence or "", n.sentiment or "", n.topic or ""
+        )
+        if zh and zh != current:
+            n.title_zh = zh
+            updated += 1
+
+    if updated:
+        db.commit()
+    return updated

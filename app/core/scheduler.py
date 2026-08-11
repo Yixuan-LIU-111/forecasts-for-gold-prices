@@ -162,6 +162,19 @@ def _job_scrape_news() -> None:
     except Exception as e:  # noqa: BLE001
         logger.warning("新闻实时爬取失败：%s", e)
 
+    # 爬取后为新入库的英文标题补生成中文概括标题。
+    # 外部爬虫直连共享 news 表、不写 title_zh，此处统一收口，避免前端出现英文标题。
+    try:
+        from app.models.database import SessionLocal
+        from app.core.title_summary import backfill_missing_title_zh
+
+        with SessionLocal() as db:
+            n_titles = backfill_missing_title_zh(db)
+        if n_titles:
+            logger.info("中文标题已补齐：%d 条", n_titles)
+    except Exception as e:  # noqa: BLE001
+        logger.warning("中文标题补齐失败（不影响已入库数据）: %s", e)
+
     # 爬取后把实时情感聚合为规范因子（写入 factor_data，供模型/归因消费）
     try:
         from app.models.database import SessionLocal
@@ -233,4 +246,63 @@ def stop_scheduler() -> None:
     if _scheduler is not None:
         _scheduler.shutdown(wait=False)
         _scheduler = None
-        logger.info("调度器已停止")
+    logger.info("调度器已停止")
+
+
+def get_scheduler_jobs() -> list[str]:
+    """返回当前已挂载的调度任务 id 列表（供接口/日志展示）。"""
+    if _scheduler is None:
+        return []
+    return [j.id for j in _scheduler.get_jobs()]
+
+
+def reconfigure_scheduler() -> dict:
+    """根据当前 settings.demo_mode 动态挂载/卸载「实时采集/信号/NewsAPI」任务。
+
+    - demo_mode=True  → 仅保留新闻实时爬取（news_scrape），卸载 collect/signal/news
+    - demo_mode=False → 挂载 collect/signal/news（实时模式），news_scrape 始终保留
+    返回 {scheduler_running, jobs} 供接口展示；无论成功与否都不抛异常（调用方已兜底）。
+    """
+    global _scheduler
+    live_ids = ("collect", "signal", "news")
+
+    if _scheduler is None:
+        # 调度器尚未启动：settings 已是新值，下次 start_scheduler 会按新值挂载
+        jobs = sorted(live_ids) if not settings.demo_mode else []
+        if settings.news_scrape_enabled:
+            jobs.append("news_scrape")
+        logger.info(
+            "调度器未启动，demo_mode=%s 将在启动时生效；目标任务：%s",
+            settings.demo_mode, jobs,
+        )
+        return {"scheduler_running": False, "jobs": jobs}
+
+    def _has(jid: str) -> bool:
+        return _scheduler.get_job(jid) is not None
+
+    if not settings.demo_mode:
+        # 进入实时模式：补齐缺失的实时任务（缺失才加，避免重复挂载）
+        if not _has("collect"):
+            _scheduler.add_job(
+                _job_collect, IntervalTrigger(seconds=settings.collect_interval_seconds),
+                id="collect", max_instances=1, coalesce=True,
+            )
+        if not _has("signal"):
+            _scheduler.add_job(
+                _job_signal, IntervalTrigger(seconds=settings.signal_interval_seconds),
+                id="signal", max_instances=1, coalesce=True,
+            )
+        if not _has("news"):
+            _scheduler.add_job(
+                _job_news, IntervalTrigger(seconds=settings.collect_interval_seconds * 2),
+                id="news", max_instances=1, coalesce=True,
+            )
+    else:
+        # 进入演示模式：卸载实时任务（新闻爬取保留，因其不依赖付费外部接口）
+        for jid in live_ids:
+            if _has(jid):
+                _scheduler.remove_job(jid)
+
+    jobs = get_scheduler_jobs()
+    logger.info("调度器已按 demo_mode=%s 重新配置，当前任务：%s", settings.demo_mode, jobs)
+    return {"scheduler_running": True, "jobs": jobs}
