@@ -351,25 +351,30 @@ class GoldPriceCollector:
     SYMBOL = "GC=F"
     SINA_URL = "https://hq.sinajs.cn/list=XAUUSD"
     SINA_REFERER = "https://finance.sina.com.cn"
+    # 实时外汇报价源（无需 key、stdlib 可达、按 tick 变动，提供真正"动起来"的行情）
+    SWISSQUOTE_URL = "https://forex-data-feed.swissquote.com/public-quotes/bboquotes/instrument/XAU/USD"
+    GOLDAPI_URL = "https://api.gold-api.com/price/XAU"
+
+    def _urllib_get(self, url: str, timeout: float = 8.0) -> str:
+        """绕过本机代理用 stdlib 拉取外网内容（环境 http_proxy 指向本地端口会致外网失败）。"""
+        import urllib.request
+
+        req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
+        opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+        with opener.open(req, timeout=timeout) as resp:
+            return resp.read().decode("utf-8", errors="ignore")
 
     def fetch_sina(self) -> Optional[tuple[datetime, float, int]]:
         """新浪财经 XAU/USD 实时报价（国内可达、无需 key、零三方依赖）。
 
         返回形如 var hq_str_XAUUSD="时间,买价,卖价,当前价,成交量,...";
         取字段[3]=当前价、[4]=成交量。时间戳用采集当前 UTC 时间。
+        注意：本环境下新浪的「当前价」字段常为陈旧快照，仅作为最后兜底。
         """
         import re
-        import urllib.request
 
-        req = urllib.request.Request(
-            self.SINA_URL,
-            headers={"Referer": self.SINA_REFERER, "User-Agent": "Mozilla/5.0"},
-        )
-        # 显式绕过环境代理：本机 http_proxy 指向本地端口，会让外网请求失败
-        opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
         try:
-            with opener.open(req, timeout=5) as resp:
-                text = resp.read().decode("gbk", errors="ignore")
+            text = self._urllib_get(self.SINA_URL, timeout=5)
         except Exception as e:  # noqa: BLE001
             logger.warning("新浪金价采集异常: %s", e)
             return None
@@ -390,36 +395,85 @@ class GoldPriceCollector:
         volume = int(float(vol_raw)) if vol_raw not in ("", "0.0000") else 0
         return (datetime.now(timezone.utc), price, volume)
 
-    def fetch_latest(self, timeout: float = 8.0) -> Optional[tuple[datetime, float, int]]:
-        """返回 (timestamp, price, volume)，新浪优先（国内可达、零三方依赖、秒级超时），
-        yfinance 作为次级兜底。
+    def fetch_swissquote(self) -> Optional[tuple[datetime, float, int]]:
+        """Swissquote 公开 XAU/USD 逐笔报价（首选实时源）。
 
-        用线程 + 超时保护整体调用：即便 yfinance 在受限网络下「挂起」而非抛错，
+        无需 key、stdlib 可达、按 tick 变动——能提供真正"动起来"的行情，
+        解决旧方案（yfinance 未安装 / 新浪 latest 字段为陈旧快照）导致走势图
+        看起来"不更新"的问题。取首条 spreadProfile 的 (bid+ask)/2 作为中间价，
+        用行情自带的 ts（毫秒）作为时间戳，使走势图按真实行情时间滚动。
+        """
+        try:
+            import json
+
+            text = self._urllib_get(self.SWISSQUOTE_URL, timeout=6)
+            data = json.loads(text)
+            if not isinstance(data, list) or not data:
+                return None
+            for topo in data:
+                spp = topo.get("spreadProfilePrices") or []
+                if spp and "bid" in spp[0] and "ask" in spp[0]:
+                    bid = float(spp[0]["bid"])
+                    ask = float(spp[0]["ask"])
+                    mid = round((bid + ask) / 2.0, 2)
+                    if mid <= 0:
+                        return None
+                    ts_ms = topo.get("ts")
+                    ts = (
+                        datetime.fromtimestamp(ts_ms / 1000.0, tz=timezone.utc)
+                        if ts_ms
+                        else datetime.now(timezone.utc)
+                    )
+                    return (ts, mid, 0)
+        except Exception as e:  # noqa: BLE001
+            logger.warning("Swissquote 金价采集异常: %s", e)
+        return None
+
+    def fetch_goldapi(self) -> Optional[tuple[datetime, float, int]]:
+        """gold-api.com 实时金价（无需 key），作为 Swissquote 的次级兜底。"""
+        try:
+            import json
+
+            text = self._urllib_get(self.GOLDAPI_URL, timeout=6)
+            d = json.loads(text)
+            price = float(d.get("price") or 0)
+            if price <= 0:
+                return None
+            ua = d.get("updatedAt")
+            if ua:
+                try:
+                    ts = datetime.fromisoformat(str(ua).replace("Z", "+00:00"))
+                except Exception:  # noqa: BLE001
+                    ts = datetime.now(timezone.utc)
+            else:
+                ts = datetime.now(timezone.utc)
+            return (ts, round(price, 2), 0)
+        except Exception as e:  # noqa: BLE001
+            logger.warning("gold-api 金价采集异常: %s", e)
+        return None
+
+    def fetch_latest(self, timeout: float = 18.0) -> Optional[tuple[datetime, float, int]]:
+        """返回 (timestamp, price, volume)，多源容错，按实时性/可达性排序：
+
+        1) Swissquote 逐笔外汇报价（首选：真正逐 tick 变动、国内可达、无需 key）
+        2) gold-api.com 实时金价（次级兜底）
+        3) 新浪财经 XAU/USD（最后兜底；其 latest 字段本环境常为陈旧快照）
+
+        整调用线程 + 超时保护：任何单一源在网络受限下「挂起」而非抛错时，
         也能在 timeout 内返回，确保实时采集任务永不阻塞后台调度器，
-        从而不会拖累页面金价走势的定时刷新。
+        从而不影响页面金价走势的定时刷新。每个源内部也各自带 urllib 超时。
         """
         import concurrent.futures as _cf
 
         def _run() -> Optional[tuple[datetime, float, int]]:
-            # 新浪优先：可靠、快、无需 key，是受限网络下的主用源
-            sina = self.fetch_sina()
-            if sina is not None:
-                return sina
-            # 次级：yfinance（海外环境更完整，但可能被限流/挂起）
-            try:
-                import yfinance as yf
-
-                t = yf.Ticker(self.SYMBOL)
-                hist = t.history(period="1d", interval="1m")
-                if not hist.empty:
-                    last = hist.iloc[-1]
-                    return (
-                        datetime.now(timezone.utc),
-                        float(last["Close"]),
-                        int(last.get("Volume", 0) or 0),
-                    )
-            except Exception as e:  # noqa: BLE001
-                logger.warning("yfinance 金价采集异常: %s", e)
+            for fetcher in (self.fetch_swissquote, self.fetch_goldapi, self.fetch_sina):
+                try:
+                    r = fetcher()
+                except Exception as e:  # noqa: BLE001
+                    logger.warning("%s 采集异常: %s", fetcher.__name__, e)
+                    r = None
+                if r is not None:
+                    return r
             return None
 
         try:
@@ -429,28 +483,11 @@ class GoldPriceCollector:
             logger.warning("金价采集超时（>%ss），跳过本轮", timeout)
             return None
         if result is None:
-            logger.warning("金价采集失败：新浪与 yfinance 均不可用")
+            logger.warning("金价采集失败：Swissquote / gold-api / 新浪 均不可用")
         return result
 
     def fetch_series(self, period: str = "1d", interval: str = "5m") -> list[tuple]:
-        """返回 [(timestamp, price, volume), ...]，多源容错。"""
-        try:
-            import yfinance as yf
-
-            t = yf.Ticker(self.SYMBOL)
-            hist = t.history(period=period, interval=interval)
-            if not hist.empty:
-                return [
-                    (
-                        ts.to_pydatetime().replace(tzinfo=timezone.utc),
-                        float(row["Close"]),
-                        int(row.get("Volume", 0) or 0),
-                    )
-                    for ts, row in hist.iterrows()
-                ]
-        except Exception as e:  # noqa: BLE001
-            logger.warning("yfinance 金价序列采集异常（回退新浪）: %s", e)
-        sina = self.fetch_sina()
-        if sina:
-            return [sina]
-        return []
+        """返回 [(timestamp, price, volume), ...]。实时源为逐笔报价无历史，
+        故直接返回最近一次实时点；若不可用返回空列表。"""
+        r = self.fetch_latest()
+        return [r] if r else []
