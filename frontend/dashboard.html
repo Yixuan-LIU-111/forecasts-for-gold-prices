@@ -260,7 +260,8 @@
 
   .legend{display:flex;gap:var(--s4);font-size:12px;color:var(--ink-2);margin-top:var(--s3);flex-wrap:wrap}
   .legend span{display:inline-flex;align-items:center;gap:7px}
-  .legend i{width:11px;height:11px;border-radius:3px;display:inline-block}
+  .legend i{width:18px;height:3px;border-radius:2px;display:inline-block}
+  .legend i.dash{height:0;border-top:2px dotted var(--ink-3);border-radius:0;background:transparent}
   .muted{color:var(--ink-3);font-size:12px}
   .chart{width:100%}
 
@@ -343,7 +344,7 @@
                 <div id="priceChart" class="chart" style="height:300px"></div>
                 <div class="legend">
                   <span><i style="background:var(--gold)"></i>XAUUSD</span>
-                  <span id="priceMaLegend" style="display:none"><i style="background:var(--ink-3)"></i>30分钟均线</span>
+                  <span id="priceMaLegend" style="display:none"><i class="dash"></i>30分钟均线</span>
                 </div>
               </div>
               <div class="tile" id="quoteBox">
@@ -663,6 +664,10 @@ const REFRESH_MS = 60000;            // 60 秒轮询一次
 let _refreshTimer = null;
 function nowStr(){ const d=new Date(); return d.toLocaleTimeString('zh-CN',{hour12:false}); }
 function markUpdated(){ const e=document.getElementById('lastUpdate'); if(e) e.textContent='上次更新 '+nowStr(); }
+// 后端时间戳以 UTC 存储（如 2026-08-12T06:37:36），按"北京时间（UTC+8）"展示：
+// 先按 UTC 解析，再用本地时区（环境已设为 Asia/Shanghai）格式化。
+function toUTCms(s){ if(!s) return NaN; const t = /[Zz]|[+-]\d{2}:?\d{2}$/.test(s) ? s : s + 'Z'; const v = Date.parse(t); return v; }
+function bjHM(iso){ const v = toUTCms(iso); if(isNaN(v)) return (iso||'').slice(11,16) || '--'; return new Date(v).toLocaleTimeString('zh-CN',{hour12:false}).slice(0,5); }
 async function refreshActive(){
   const active = document.querySelector('.view.active');
   const v = active ? active.dataset.view : 'dashboard';
@@ -746,7 +751,7 @@ function renderMarket(r){
   box.innerHTML =
     '<h4>当前报价</h4>' +
     '<div class="metric ' + (up?'c-bull':'c-bear') + '">' + fmt(d.current_price) + '<span class="u">USD/oz</span></div>' +
-    '<div class="sub">' + arrow(d.change) + ' ' + fmt(d.change) + ' (' + (up?'+':'') + fmt(d.change_pct) + '%) · 更新 ' + (d.timestamp||'').slice(11,16) + '</div>' +
+    '<div class="sub">' + arrow(d.change) + ' ' + fmt(d.change) + ' (' + (up?'+':'') + fmt(d.change_pct) + '%) · 更新 ' + bjHM(d.timestamp) + '</div>' +
     '<hr style="border:0;border-top:1px dashed var(--line);margin:var(--s4) 0">' +
     '<h4 style="margin-bottom:10px">关联指标</h4>' +
     '<div class="grid" style="gap:var(--s3)" id="quoteRel"></div>';
@@ -766,8 +771,8 @@ function drawPrice(d){
   // 横轴使用真实时间轴：当实时数据带来更晚的时间戳时，坐标轴范围会自动扩展滚动，
   // 不再是固定不动的分类标签。解析失败时回退为 HH:MM 字符串标签。
   const raw = d.prices.map(p => p.time || '');
-  const allDates = raw.length>0 && raw.every(s => s && !isNaN(Date.parse(s)));
-  const xs = allDates ? raw.map(s => Date.parse(s)) : raw.map(s => s.slice(11,16));
+  const allDates = raw.length>0 && raw.every(s => s && !isNaN(toUTCms(s)));
+  const xs = allDates ? raw.map(s => toUTCms(s)) : raw.map(s => s.slice(11,16));
   const p = d.prices.map(x => x.price);
   // 30 分钟均线需要至少 30 个数据点才绘制；不足时隐藏图例，避免"图例与折线无关系"。
   const maReady = p.length >= 30;
@@ -775,8 +780,8 @@ function drawPrice(d){
   const xAxis = allDates
     ? {...baseLayout.xaxis, type:'date', tickformat:'%H:%M', tickangle:-35, automargin:true, nticks:8, ticklabelmode:'period'}
     : {...baseLayout.xaxis, type:'category', tickangle:-35, automargin:true, nticks:8};
-  const htMain = allDates ? '%{x|%H:%M}<br>XAU/USD %{y:.1f}<extra></extra>' : '%{x}<br>XAU/USD %{y:.1f}<extra></extra>';
-  const htMa = allDates ? '%{x|%H:%M}<br>30分钟均线 %{y:.1f}<extra></extra>' : '%{x}<br>30分钟均线 %{y:.1f}<extra></extra>';
+  const htMain = allDates ? '%{x|%H:%M}<br>XAU/USD %{y:.2f}<extra></extra>' : '%{x}<br>XAU/USD %{y:.2f}<extra></extra>';
+  const htMa = allDates ? '%{x|%H:%M}<br>30分钟均线 %{y:.2f}<extra></extra>' : '%{x}<br>30分钟均线 %{y:.2f}<extra></extra>';
   const data = [
     {x:xs,y:p,type:'scatter',mode:'lines',line:{color:'oklch(58% 0.115 75)',width:2},name:'XAUUSD',hovertemplate:htMain}
   ];
@@ -785,7 +790,7 @@ function drawPrice(d){
   }
   const layout = {...baseLayout,
      xaxis:xAxis,
-     yaxis:{...baseLayout.yaxis, tickformat:'.1f'},  // 纵坐标统一保留 1 位小数
+     yaxis:{...baseLayout.yaxis, tickformat:'.2f'},  // 纵坐标统一保留 2 位小数
      margin:{...baseLayout.margin, b:44}             // 加高底部留白，避免时间标签被截断
   };
   // 同步自定义图例：有均线数据时才显示"30分钟均线"，保持图例与真实折线一一对应。
@@ -820,7 +825,7 @@ function renderTicker(marketR, factorsR){
     if(fv.value!=null){ vixVal=fmt(fv.value); vix='<span class="'+cls(fv.change)+'">'+a(fv.change)+fmt(fv.change)+'</span>'; }
     if(ft.value!=null){ tipsVal=fmt(ft.value); tips='<span class="'+cls(ft.change)+'">'+a(ft.change)+fmt(ft.change)+'</span>'; }
     if(fh.value!=null){ hawkVal=fmt(fh.value); hawk='<span class="'+cls(-fh.value)+'">'+(fh.value<0?'鹰派':'鸽派')+'</span>'; }
-    if(fs.value!=null){ sentVal=fmt(fs.value); sent='<span class="'+(fs.value>=0?'up':'down')+'">'+fmt(fs.value)+'</span>'; }
+    if(fs.value!=null){ sentVal=fmt(fs.value); const sc=fs.change||0; sent='<span class="'+(sc>=0?'up':'down')+'">'+(sc>0?'▲':(sc<0?'▼':'—'))+fmt(sc)+'</span>'; }
   }
   setTxt('tkXauVal',xauVal); set('tkXau',xau);
   setTxt('tkDxyVal',dxyVal); set('tkDxy',dxy);
@@ -854,7 +859,7 @@ function renderSignal(r){
       '<div class="facts">' +
         '<div><div class="l">信号强度</div><div class="v">'+fmt(d.strength,0)+'</div></div>' +
         '<div><div class="l">建议仓位</div><div class="v">'+escapeHtml(d.position||'--')+'</div></div>' +
-        '<div><div class="l">生成时间</div><div class="v" style="font-size:14px">'+((d.timestamp||'').slice(11,16)||'--')+'</div></div>' +
+        '<div><div class="l">生成时间</div><div class="v" style="font-size:14px">'+bjHM(d.timestamp)+'</div></div>' +
       '</div>' +
       '<details><summary>信号归因与引用溯源（可解释性）</summary>' +
         '<div class="inner grid g-2" style="gap:var(--s3);margin-top:var(--s3)">' +
