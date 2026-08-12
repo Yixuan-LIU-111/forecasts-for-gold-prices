@@ -336,8 +336,8 @@
                 <h4>实时黄金价格走势 <span class="tag">Plotly</span></h4>
                 <div id="priceChart" class="chart" style="height:300px"></div>
                 <div class="legend">
-                  <span><i style="background:var(--gold)"></i>XAU/USD</span>
-                  <span><i style="background:var(--ink-3)"></i>30 分钟均线</span>
+                  <span><i style="background:var(--gold)"></i>XAUUSD</span>
+                  <span id="priceMaLegend" style="display:none"><i style="background:var(--ink-3)"></i>30分钟均线</span>
                 </div>
               </div>
               <div class="tile" id="quoteBox">
@@ -750,7 +750,7 @@ function renderMarket(r){
     const f = name => (window._factors.factors.find(x=>x.name===name)||{});
     const dxy=f('DXY'), vix=f('VIX');
     rel.innerHTML =
-      '<div class="sub">美元指数 DXY <b class="' + (dxy.change>0?'c-bear':'c-bull') + '">' + fmt(dxy.value) + ' ' + arrow(dxy.change) + fmt(dxy.change) + '</b></div>' +
+      '<div class="sub">美元指数 DXY <b class="' + (dxy.change>0?'c-bull':'c-bear') + '">' + fmt(dxy.value) + ' ' + arrow(dxy.change) + fmt(dxy.change) + '</b></div>' +
       '<div class="sub">恐慌指数 VIX <b class="' + (vix.change>0?'c-bull':'c-bear') + '">' + fmt(vix.value) + ' ' + arrow(vix.change) + fmt(vix.change) + '</b></div>';
   }
   drawPrice(d);
@@ -763,21 +763,28 @@ function drawPrice(d){
   const allDates = raw.length>0 && raw.every(s => s && !isNaN(Date.parse(s)));
   const xs = allDates ? raw.map(s => Date.parse(s)) : raw.map(s => s.slice(11,16));
   const p = d.prices.map(x => x.price);
-  const ma = p.map((_,i)=> i<30?null:p.slice(Math.max(0,i-29),i+1).reduce((s,x)=>s+x,0)/Math.min(i+1,30));
+  // 30 分钟均线需要至少 30 个数据点才绘制；不足时隐藏图例，避免"图例与折线无关系"。
+  const maReady = p.length >= 30;
+  const ma = maReady ? p.map((_,i)=> i<29?null:p.slice(i-29,i+1).reduce((s,x)=>s+x,0)/30) : [];
   const xAxis = allDates
     ? {...baseLayout.xaxis, type:'date', tickformat:'%H:%M', tickangle:-35, automargin:true, nticks:8, ticklabelmode:'period'}
     : {...baseLayout.xaxis, type:'category', tickangle:-35, automargin:true, nticks:8};
   const htMain = allDates ? '%{x|%H:%M}<br>XAU/USD %{y:.1f}<extra></extra>' : '%{x}<br>XAU/USD %{y:.1f}<extra></extra>';
-  const htMa = allDates ? '%{x|%H:%M}<br>MA30 %{y:.1f}<extra></extra>' : '%{x}<br>MA30 %{y:.1f}<extra></extra>';
+  const htMa = allDates ? '%{x|%H:%M}<br>30分钟均线 %{y:.1f}<extra></extra>' : '%{x}<br>30分钟均线 %{y:.1f}<extra></extra>';
   const data = [
-    {x:xs,y:p,type:'scatter',mode:'lines',line:{color:'oklch(58% 0.115 75)',width:2},name:'XAU/USD',hovertemplate:htMain},
-    {x:xs,y:ma,type:'scatter',mode:'lines',line:{color:'oklch(62% 0.014 65)',width:1.4,dash:'dot'},name:'MA30',hovertemplate:htMa}
+    {x:xs,y:p,type:'scatter',mode:'lines',line:{color:'oklch(58% 0.115 75)',width:2},name:'XAUUSD',hovertemplate:htMain}
   ];
+  if (maReady) {
+    data.push({x:xs,y:ma,type:'scatter',mode:'lines',line:{color:'oklch(62% 0.014 65)',width:1.4,dash:'dot'},name:'30分钟均线',hovertemplate:htMa});
+  }
   const layout = {...baseLayout,
      xaxis:xAxis,
      yaxis:{...baseLayout.yaxis, tickformat:'.1f'},  // 纵坐标统一保留 1 位小数
      margin:{...baseLayout.margin, b:44}             // 加高底部留白，避免时间标签被截断
   };
+  // 同步自定义图例：有均线数据时才显示"30分钟均线"，保持图例与真实折线一一对应。
+  const maLegend = document.getElementById('priceMaLegend');
+  if(maLegend) maLegend.style.display = maReady ? '' : 'none';
   // 复用图表实例：首次 newPlot，后续用 react 增量更新，避免每 60s 反复 newPlot
   // 累积 Plotly 内部状态/事件监听导致的内存泄漏；视觉与交互风格保持不变。
   if (window._pricePlotReady && document.getElementById('priceChart')) {
