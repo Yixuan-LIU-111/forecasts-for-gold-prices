@@ -97,7 +97,9 @@
   .rail-foot .dot{width:7px;height:7px;border-radius:50%;background:oklch(50% 0.13 150)} /* 健康=绿，独立于涨跌语义 */
 
   /* ---------- 模块一外壳：右工作画布 ---------- */
-  .canvas{display:flex;flex-direction:column;min-width:0}
+  .canvas{display:flex;flex-direction:column;min-width:0;height:100vh;overflow-y:auto;position:relative}
+  /* 顶栏 + 行情条整体吸顶：滚动时始终可见 */
+  .header-wrap{position:sticky;top:3px;z-index:40;background:var(--surface)}
   /* —— 顶栏运行模式标识 —— */
   .mode-badge{display:inline-flex;align-items:center;font-size:12px;font-weight:600;padding:5px 11px;border-radius:30px}
   .mode-badge.demo{color:oklch(50% 0.13 70);background:oklch(94% 0.06 70)}
@@ -137,8 +139,10 @@
     font-size:12.5px;color:var(--ink-2)}
   .ticker b{color:var(--ink);font-weight:600}
   .ticker .up{color:var(--bull)} .ticker .down{color:var(--bear)}
+  .ticker span{display:inline-flex;align-items:center;gap:6px}
+  .ticker .tk-val{color:var(--ink);font-weight:600;font-family:var(--serif);font-variant-numeric:tabular-nums}
 
-  .scroll{overflow-y:auto}
+  .scroll{/* 垂直滚动已上提到 .canvas；此处仅作内容包裹 */}
   .content{padding:var(--s6) var(--s6) var(--s7);max-width:1320px}
 
   /* ============================================================
@@ -299,23 +303,25 @@
 
   <!-- ============== 右画布 ============== -->
   <main class="canvas">
-    <header class="topbar">
-      <h1 id="pageTitle">实时仪表盘</h1>
-      <span class="crumb" id="pageCrumb">可视化仪表盘</span>
-      <span class="spacer"></span>
-      <span class="mode-badge demo" id="topbarMode">演示模式</span>
-      <span class="status" id="refreshStatus" title="点击立即刷新">实时刷新中…</span>
-      <span class="clock" id="clock">--:--:--</span>
-      <span class="muted" id="lastUpdate"></span>
-    </header>
+    <div class="header-wrap">
+      <header class="topbar">
+        <h1 id="pageTitle">实时仪表盘</h1>
+        <span class="crumb" id="pageCrumb">可视化仪表盘</span>
+        <span class="spacer"></span>
+        <span class="mode-badge demo" id="topbarMode">演示模式</span>
+        <span class="status" id="refreshStatus" title="点击立即刷新">实时刷新中…</span>
+        <span class="clock" id="clock">--:--:--</span>
+        <span class="muted" id="lastUpdate"></span>
+      </header>
 
-    <div class="ticker" id="ticker">
-      <span><b>XAU/USD</b> <span id="tkXau">--</span></span>
-      <span><b>DXY</b> <span id="tkDxy">--</span></span>
-      <span><b>VIX</b> <span id="tkVix">--</span></span>
-      <span><b>TIPS 10Y</b> <span id="tkTips">--</span></span>
-      <span><b>鹰鸽指数</b> <span id="tkHawk">--</span></span>
-      <span><b>情感均值</b> <span id="tkSent">--</span></span>
+      <div class="ticker" id="ticker">
+        <span><b>XAU/USD</b> <span class="tk-val" id="tkXauVal">--</span> <span id="tkXau">--</span></span>
+        <span><b>DXY</b> <span class="tk-val" id="tkDxyVal">--</span> <span id="tkDxy">--</span></span>
+        <span><b>VIX</b> <span class="tk-val" id="tkVixVal">--</span> <span id="tkVix">--</span></span>
+        <span><b>TIPS 10Y</b> <span class="tk-val" id="tkTipsVal">--</span> <span id="tkTips">--</span></span>
+        <span><b>鹰鸽指数</b> <span class="tk-val" id="tkHawkVal">--</span> <span id="tkHawk">--</span></span>
+        <span><b>情感均值</b> <span class="tk-val" id="tkSentVal">--</span> <span id="tkSent">--</span></span>
+      </div>
     </div>
 
     <div class="scroll">
@@ -797,9 +803,12 @@ function drawPrice(d){
 
 function renderTicker(marketR, factorsR){
   const set=(id,html)=>{const e=document.getElementById(id); if(e) e.innerHTML=html;};
+  const setTxt=(id,text)=>{const e=document.getElementById(id); if(e) e.textContent=text;};
   let xau='--', dxy='--', vix='--', tips='--', hawk='--', sent='--';
+  let xauVal='--', dxyVal='--', vixVal='--', tipsVal='--', hawkVal='--', sentVal='--';
   if(marketR.status==='fulfilled' && marketR.value){
     const m=marketR.value; const up=m.change>=0;
+    xauVal=fmt(m.current_price);
     xau='<span class="'+(up?'up':'down')+'">'+(up?'▲':'▼')+fmt(m.change_pct)+'%</span>';
   }
   if(factorsR.status==='fulfilled' && factorsR.value && factorsR.value.factors){
@@ -807,13 +816,18 @@ function renderTicker(marketR, factorsR){
     const fd=f('DXY'), fv=f('VIX'), ft=f('TIPS'), fh=f('hawk_dove'), fs=f('sentiment');
     const cls=v=>(v>0?'up':'down');
     const a=v=>arrow(v);
-    if(fd.value!=null) dxy='<span class="'+cls(fd.change)+'">'+a(fd.change)+fmt(fd.change)+'</span>';
-    if(fv.value!=null) vix='<span class="'+cls(fv.change)+'">'+a(fv.change)+fmt(fv.change)+'</span>';
-    if(ft.value!=null) tips='<span class="'+cls(ft.change)+'">'+a(ft.change)+fmt(ft.change)+'</span>';
-    if(fh.value!=null) hawk='<span class="'+cls(-fh.value)+'">'+(fh.value<0?'鹰派':'鸽派')+'</span>';
-    if(fs.value!=null) sent='<span class="'+(fs.value>=0?'up':'down')+'">'+fmt(fs.value)+'</span>';
+    if(fd.value!=null){ dxyVal=fmt(fd.value); dxy='<span class="'+cls(fd.change)+'">'+a(fd.change)+fmt(fd.change)+'</span>'; }
+    if(fv.value!=null){ vixVal=fmt(fv.value); vix='<span class="'+cls(fv.change)+'">'+a(fv.change)+fmt(fv.change)+'</span>'; }
+    if(ft.value!=null){ tipsVal=fmt(ft.value); tips='<span class="'+cls(ft.change)+'">'+a(ft.change)+fmt(ft.change)+'</span>'; }
+    if(fh.value!=null){ hawkVal=fmt(fh.value); hawk='<span class="'+cls(-fh.value)+'">'+(fh.value<0?'鹰派':'鸽派')+'</span>'; }
+    if(fs.value!=null){ sentVal=fmt(fs.value); sent='<span class="'+(fs.value>=0?'up':'down')+'">'+fmt(fs.value)+'</span>'; }
   }
-  set('tkXau',xau); set('tkDxy',dxy); set('tkVix',vix); set('tkTips',tips); set('tkHawk',hawk); set('tkSent',sent);
+  setTxt('tkXauVal',xauVal); set('tkXau',xau);
+  setTxt('tkDxyVal',dxyVal); set('tkDxy',dxy);
+  setTxt('tkVixVal',vixVal); set('tkVix',vix);
+  setTxt('tkTipsVal',tipsVal); set('tkTips',tips);
+  setTxt('tkHawkVal',hawkVal); set('tkHawk',hawk);
+  setTxt('tkSentVal',sentVal); set('tkSent',sent);
   if(factorsR.status==='fulfilled') window._factors = factorsR.value; // 供关联指标复用
 }
 
