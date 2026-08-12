@@ -53,7 +53,7 @@ def serialize_signal(s: Optional[Signal]) -> Optional[dict]:
 
 def serialize_market(db: Session, range_hours: str = "4h") -> dict:
     """构造行情响应（对齐 market.json）。"""
-    period_map = {"1h": 12, "4h": 48, "1d": 96, "3d": 288, "7d": 672}
+    period_map = {"1h": 12, "4h": 48, "1d": 96, "3d": 288, "7d": 672, "48h": 5760}
     limit = period_map.get(range_hours, 48)
 
     rows = db.execute(
@@ -261,7 +261,7 @@ def serialize_hawk_dove_events(db: Session, days: int = 7) -> list[dict]:
 
 
 def range_hours_to_period(range_hours: str) -> str:
-    return {"1h": "1h", "4h": "4h", "1d": "1d", "3d": "3d", "7d": "7d"}.get(range_hours, "4h")
+    return {"1h": "1h", "4h": "4h", "1d": "1d", "3d": "3d", "7d": "7d", "48h": "48h"}.get(range_hours, "4h")
 
 
 def serialize_data_sources(db: Session) -> list[dict]:

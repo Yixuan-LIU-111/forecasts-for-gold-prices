@@ -131,7 +131,7 @@ def collect_gold_price(db: Session) -> bool:
         )
         n = store_market_data(db, df)
         if n > 0:
-            _prune_xauusd(db, keep=5000)
+            _prune_xauusd(db, keep=6000)
         logger.info("采集金价成功：写入 %d 条（XAUUSD）", n)
         return n > 0
     except Exception as e:  # noqa: BLE001
@@ -144,7 +144,7 @@ def _prune_xauusd(db: Session, keep: int = 5000) -> None:
     """保留 XAUUSD 最近 keep 条，删除更早的历史，避免实时服务无限膨胀。
 
     仅在明显超出阈值时才删，避免无谓写库；保留阈值远大于前端最大展示窗口
-    （7d≈672 点），不影响任意时间范围的走势渲染。
+    （7d≈672 点、48h≈5760 点），不影响任意时间范围的走势渲染。
     """
     from sqlalchemy import select, func, desc
 

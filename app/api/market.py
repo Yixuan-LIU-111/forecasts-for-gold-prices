@@ -11,7 +11,7 @@ router = APIRouter(prefix="/api/v1/market", tags=["market"])
 
 @router.get("/price", response_model=ApiResponse)
 def get_market_price(
-    range_hours: str = Query("4h", description="1h/4h/1d/3d/7d"),
+    range_hours: str = Query("4h", description="1h/4h/1d/3d/7d/48h"),
     db: Session = Depends(get_db),
 ):
     return ApiResponse.ok(serialize_market(db, range_hours))

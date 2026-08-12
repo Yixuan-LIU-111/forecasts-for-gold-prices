@@ -102,9 +102,9 @@ def test_news_offset_paging(client):
     assert far.json()["data"] == [], "越界 offset 应返回空列表而非报错"
 
 
-@pytest.mark.parametrize("rng", ["1h", "4h", "1d", "3d", "7d"])
+@pytest.mark.parametrize("rng", ["1h", "4h", "1d", "3d", "7d", "48h"])
 def test_market_range_all_valid(client, rng):
-    """IT-API-024 正常流程：5 档时间窗均可用，且窗口越大点数不减少。"""
+    """IT-API-024 正常流程：各档时间窗均可用，且窗口越大点数不减少。"""
     data = client.get(f"/api/v1/market/price?range_hours={rng}").json()["data"]
     assert isinstance(data["prices"], list)
     assert data["current_price"] >= 0
@@ -113,7 +113,7 @@ def test_market_range_all_valid(client, rng):
 def test_market_range_monotonic(client):
     """IT-API-025 边界值：时间窗放大，返回点数单调不减。"""
     counts = []
-    for rng in ("1h", "4h", "1d", "3d", "7d"):
+    for rng in ("1h", "4h", "1d", "3d", "7d", "48h"):
         counts.append(len(client.get(f"/api/v1/market/price?range_hours={rng}").json()["data"]["prices"]))
     assert counts == sorted(counts), f"点数应随窗口单调不减: {counts}"
 

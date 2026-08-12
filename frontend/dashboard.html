@@ -725,7 +725,7 @@ const CFG = {displayModeBar:false, responsive:true};
 /* ===================== 仪表盘 ===================== */
 async function loadDashboard(){
   const [market, signal, factors, news, stats, bt] = await Promise.allSettled([
-    api('/api/v1/market/price?range_hours=4h'),
+    api('/api/v1/market/price?range_hours=48h'),
     api('/api/v1/signals/latest'),
     api('/api/v1/factors'),
     api('/api/v1/news?limit=20'),
@@ -774,11 +774,19 @@ function drawPrice(d){
   const allDates = raw.length>0 && raw.every(s => s && !isNaN(toUTCms(s)));
   const xs = allDates ? raw.map(s => toUTCms(s)) : raw.map(s => s.slice(11,16));
   const p = d.prices.map(x => x.price);
+  // 横轴固定显示「最近 48 小时」窗口：以最新数据点为右边界，左边界=右边界-48h；
+  // 若历史数据不足 48h，则回退为数据实际跨度（min(xs)~max(xs)），避免出现大片空白。
+  let xRange;
+  if (allDates && xs.length) {
+    const tEnd = Math.max(...xs);
+    const tStart = tEnd - 48 * 3600 * 1000;
+    xRange = [Math.min(tStart, Math.min(...xs)), tEnd];
+  }
   // 30 分钟均线需要至少 30 个数据点才绘制；不足时隐藏图例，避免"图例与折线无关系"。
   const maReady = p.length >= 30;
   const ma = maReady ? p.map((_,i)=> i<29?null:p.slice(i-29,i+1).reduce((s,x)=>s+x,0)/30) : [];
   const xAxis = allDates
-    ? {...baseLayout.xaxis, type:'date', tickformat:'%H:%M', tickangle:-35, automargin:true, nticks:8, ticklabelmode:'period'}
+    ? {...baseLayout.xaxis, type:'date', tickformat:'%H:%M', tickangle:-35, automargin:true, nticks:8, ticklabelmode:'period', range:xRange}
     : {...baseLayout.xaxis, type:'category', tickangle:-35, automargin:true, nticks:8};
   const htMain = allDates ? '%{x|%H:%M}<br>XAU/USD %{y:.2f}<extra></extra>' : '%{x}<br>XAU/USD %{y:.2f}<extra></extra>';
   const htMa = allDates ? '%{x|%H:%M}<br>30分钟均线 %{y:.2f}<extra></extra>' : '%{x}<br>30分钟均线 %{y:.2f}<extra></extra>';
