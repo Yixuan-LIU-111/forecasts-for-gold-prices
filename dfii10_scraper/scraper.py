@@ -31,13 +31,13 @@ def _download_via_curl() -> Optional[str]:
 
             result = subprocess.run(
                 [
-                    "curl", "-s", "--max-time", "120",
+                    "curl", "-s", "--max-time", "20",
                     "-H", "User-Agent: Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36",
                     CSV_URL,
                 ],
                 capture_output=True,
                 text=True,
-                timeout=180,
+                timeout=25,
             )
 
             if result.returncode != 0 or not result.stdout:

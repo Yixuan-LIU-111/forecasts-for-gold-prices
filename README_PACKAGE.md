@@ -20,6 +20,10 @@
 ### 前置条件
 - Windows 10 / 11
 - 安装 **Python 3.10 ~ 3.12**（安装时务必勾选 "Add Python to PATH"）
+- 构建所用机器需已存在项目本地文件 `models/predictor.joblib`（预训练模型）与
+  `data/gold_predictor.db`（种子库）。二者被 `.gitignore` 排除、不随 git 同步；
+  若缺失，`gold_predictor.spec` 会优雅跳过打包，程序首次启动将通过 seed 自动重建空库
+  （此时预测模型降级为内置基线，核心功能仍可用，但建议保留这两个文件以获得完整体验）
 
 ### 一键打包
 双击运行项目根目录下的 `build\build_exe.bat`，脚本会自动：

@@ -669,13 +669,35 @@ async function refreshActive(){
     markUpdated();
   } catch(e){ /* 单轮刷新失败不影响下一轮定时刷新 */ }
 }
+// 清理控制器：重绑或页面卸载时一次性移除所有动态事件监听，避免监听器累积泄漏
+let _refreshAbort = null;
+let _evtLast = 0;
+const _throttledRefresh = () => {
+  const now = Date.now();
+  if (now - _evtLast < 3000) return;   // 事件抖动保护：3s 内至多刷新一次
+  _evtLast = now;
+  refreshActive();
+};
 function startAutoRefresh(){
   const s = document.getElementById('refreshStatus');
   if(s) s.textContent = '自动刷新 '+(REFRESH_MS/1000)+'s';
   if(_refreshTimer) clearInterval(_refreshTimer);
   _refreshTimer = setInterval(refreshActive, REFRESH_MS);
-  if(s) s.addEventListener('click', ()=>{ if(s) s.textContent='刷新中…'; refreshActive(); });
+  // 用 AbortController 统一管理本函数挂载的动态监听：重入时先 abort 旧监听，
+  // 杜绝重复绑定；页面卸载时同样通过 abort 清理。
+  if(_refreshAbort) _refreshAbort.abort();
+  _refreshAbort = new AbortController();
+  const signal = _refreshAbort.signal;
+  if(s) s.addEventListener('click', ()=>{ s.textContent='刷新中…'; refreshActive(); }, {signal});
+  // 事件驱动刷新：页面从后台切回前台 / 窗口重新聚焦时，立即拉取最新行情
+  document.addEventListener('visibilitychange', ()=>{ if(document.visibilityState==='visible') _throttledRefresh(); }, {signal});
+  window.addEventListener('focus', _throttledRefresh, {signal});
 }
+// 页面卸载时清理定时器与事件监听，避免内存泄漏
+window.addEventListener('beforeunload', ()=>{
+  if(_refreshTimer){ clearInterval(_refreshTimer); _refreshTimer = null; }
+  if(_refreshAbort){ _refreshAbort.abort(); _refreshAbort = null; }
+});
 
 /* ===================== Plotly 主题 ===================== */
 const FONT = 'Plus Jakarta Sans, -apple-system, PingFang SC, sans-serif';
@@ -747,14 +769,23 @@ function drawPrice(d){
     : {...baseLayout.xaxis, type:'category', tickangle:-35, automargin:true, nticks:8};
   const htMain = allDates ? '%{x|%H:%M}<br>XAU/USD %{y:.1f}<extra></extra>' : '%{x}<br>XAU/USD %{y:.1f}<extra></extra>';
   const htMa = allDates ? '%{x|%H:%M}<br>MA30 %{y:.1f}<extra></extra>' : '%{x}<br>MA30 %{y:.1f}<extra></extra>';
-  Plotly.newPlot('priceChart',[
+  const data = [
     {x:xs,y:p,type:'scatter',mode:'lines',line:{color:'oklch(58% 0.115 75)',width:2},name:'XAU/USD',hovertemplate:htMain},
     {x:xs,y:ma,type:'scatter',mode:'lines',line:{color:'oklch(62% 0.014 65)',width:1.4,dash:'dot'},name:'MA30',hovertemplate:htMa}
-  ],{...baseLayout,
+  ];
+  const layout = {...baseLayout,
      xaxis:xAxis,
      yaxis:{...baseLayout.yaxis, tickformat:'.1f'},  // 纵坐标统一保留 1 位小数
      margin:{...baseLayout.margin, b:44}             // 加高底部留白，避免时间标签被截断
-  },CFG);
+  };
+  // 复用图表实例：首次 newPlot，后续用 react 增量更新，避免每 60s 反复 newPlot
+  // 累积 Plotly 内部状态/事件监听导致的内存泄漏；视觉与交互风格保持不变。
+  if (window._pricePlotReady && document.getElementById('priceChart')) {
+    Plotly.react('priceChart', data, layout, CFG);
+  } else {
+    Plotly.newPlot('priceChart', data, layout, CFG);
+    window._pricePlotReady = true;
+  }
 }
 
 function renderTicker(marketR, factorsR){

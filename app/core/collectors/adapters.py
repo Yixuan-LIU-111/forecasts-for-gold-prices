@@ -341,45 +341,116 @@ class NewsCollector:
 
 
 class GoldPriceCollector:
-    """XAU/USD 黄金价格采集器（yfinance）。"""
+    """XAU/USD 黄金价格采集器（多源容错）。
+
+    优先 yfinance（海外），失败回退新浪财经实时金价接口（国内可达、无需 key）。
+    任一链路成功即返回 (timestamp, price, volume)。时间戳统一使用采集发生的
+    当前 UTC 时间，使前端走势图随时间滚动更新，而非停留在数据源的陈旧交易日。
+    """
 
     SYMBOL = "GC=F"
+    SINA_URL = "https://hq.sinajs.cn/list=XAUUSD"
+    SINA_REFERER = "https://finance.sina.com.cn"
 
-    def fetch_latest(self) -> Optional[tuple[datetime, float, int]]:
-        """返回 (timestamp, price, volume)。"""
+    def fetch_sina(self) -> Optional[tuple[datetime, float, int]]:
+        """新浪财经 XAU/USD 实时报价（国内可达、无需 key、零三方依赖）。
+
+        返回形如 var hq_str_XAUUSD="时间,买价,卖价,当前价,成交量,...";
+        取字段[3]=当前价、[4]=成交量。时间戳用采集当前 UTC 时间。
+        """
+        import re
+        import urllib.request
+
+        req = urllib.request.Request(
+            self.SINA_URL,
+            headers={"Referer": self.SINA_REFERER, "User-Agent": "Mozilla/5.0"},
+        )
+        # 显式绕过环境代理：本机 http_proxy 指向本地端口，会让外网请求失败
+        opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
         try:
-            import yfinance as yf
-
-            t = yf.Ticker(self.SYMBOL)
-            hist = t.history(period="1d", interval="1m")
-            if hist.empty:
-                return None
-            last = hist.iloc[-1]
-            ts = hist.index[-1].to_pydatetime().replace(tzinfo=timezone.utc)
-            return (ts, float(last["Close"]), int(last.get("Volume", 0) or 0))
+            with opener.open(req, timeout=5) as resp:
+                text = resp.read().decode("gbk", errors="ignore")
         except Exception as e:  # noqa: BLE001
-            logger.warning("金价采集异常: %s", e)
+            logger.warning("新浪金价采集异常: %s", e)
+            return None
+        m = re.search(r'hq_str_XAUUSD="([^"]+)"', text)
+        if not m:
+            return None
+        parts = m.group(1).split(",")
+        # 字段: 时间,买价,卖价,当前价,成交量,今开,最高,最低,昨收,单位,日期
+        if len(parts) < 5:
+            return None
+        try:
+            price = float(parts[3])
+        except (ValueError, IndexError):
+            return None
+        if price <= 0:
+            return None
+        vol_raw = parts[4].strip()
+        volume = int(float(vol_raw)) if vol_raw not in ("", "0.0000") else 0
+        return (datetime.now(timezone.utc), price, volume)
+
+    def fetch_latest(self, timeout: float = 8.0) -> Optional[tuple[datetime, float, int]]:
+        """返回 (timestamp, price, volume)，新浪优先（国内可达、零三方依赖、秒级超时），
+        yfinance 作为次级兜底。
+
+        用线程 + 超时保护整体调用：即便 yfinance 在受限网络下「挂起」而非抛错，
+        也能在 timeout 内返回，确保实时采集任务永不阻塞后台调度器，
+        从而不会拖累页面金价走势的定时刷新。
+        """
+        import concurrent.futures as _cf
+
+        def _run() -> Optional[tuple[datetime, float, int]]:
+            # 新浪优先：可靠、快、无需 key，是受限网络下的主用源
+            sina = self.fetch_sina()
+            if sina is not None:
+                return sina
+            # 次级：yfinance（海外环境更完整，但可能被限流/挂起）
+            try:
+                import yfinance as yf
+
+                t = yf.Ticker(self.SYMBOL)
+                hist = t.history(period="1d", interval="1m")
+                if not hist.empty:
+                    last = hist.iloc[-1]
+                    return (
+                        datetime.now(timezone.utc),
+                        float(last["Close"]),
+                        int(last.get("Volume", 0) or 0),
+                    )
+            except Exception as e:  # noqa: BLE001
+                logger.warning("yfinance 金价采集异常: %s", e)
             return None
 
+        try:
+            with _cf.ThreadPoolExecutor(max_workers=1) as ex:
+                result = ex.submit(_run).result(timeout=timeout)
+        except _cf.TimeoutError:
+            logger.warning("金价采集超时（>%ss），跳过本轮", timeout)
+            return None
+        if result is None:
+            logger.warning("金价采集失败：新浪与 yfinance 均不可用")
+        return result
+
     def fetch_series(self, period: str = "1d", interval: str = "5m") -> list[tuple]:
-        """返回 [(timestamp, price, volume), ...]。"""
+        """返回 [(timestamp, price, volume), ...]，多源容错。"""
         try:
             import yfinance as yf
 
             t = yf.Ticker(self.SYMBOL)
             hist = t.history(period=period, interval=interval)
-            if hist.empty:
-                return []
-            rows = []
-            for ts, row in hist.iterrows():
-                rows.append(
+            if not hist.empty:
+                return [
                     (
                         ts.to_pydatetime().replace(tzinfo=timezone.utc),
                         float(row["Close"]),
                         int(row.get("Volume", 0) or 0),
                     )
-                )
-            return rows
+                    for ts, row in hist.iterrows()
+                ]
         except Exception as e:  # noqa: BLE001
-            logger.warning("金价序列采集异常: %s", e)
-            return []
+            logger.warning("yfinance 金价序列采集异常（回退新浪）: %s", e)
+        sina = self.fetch_sina()
+        if sina:
+            return [sina]
+        return []

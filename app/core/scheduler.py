@@ -33,17 +33,40 @@ _scheduler: Optional[BackgroundScheduler] = None
 _NEWS_SCRAPER_VENV_PYTHON = PROJECT_ROOT / "news_scraper_llm" / ".venv" / "bin" / "python"
 
 
-def _job_collect():
-    """采集因子 + 价格。"""
-    from app.core.collectors.base import collect_all_factors, collect_gold_price
+def _job_collect_factors():
+    """采集因子（DXY/VIX/TIPS/GPR 等）。
+
+    与实时金价采集解耦：即便因子源（如 FRED TIPS）因网络重试而慢，
+    也不会阻塞实时金价刷新——金价走独立任务（_job_collect_gold）。
+    """
+    from app.core.collectors.base import collect_all_factors
 
     db = SessionLocal()
     try:
         summary = collect_all_factors(db)
-        collect_gold_price(db)
-        logger.info("采集任务完成: %s", summary)
+        logger.info("因子采集任务完成: %s", summary)
     except Exception as e:  # noqa: BLE001
-        logger.warning("采集任务异常: %s", e)
+        logger.warning("因子采集任务异常: %s", e)
+    finally:
+        db.close()
+
+
+def _job_collect_gold():
+    """采集 XAU/USD 实时金价（高频、轻量、独立任务）。
+
+    与因子采集解耦后，实时金价每 gold_collect_interval_seconds 必跑一次，
+    不再受慢速因子采集（FRED 重试等）的 single-instance 互斥影响，
+    从而保证前端走势图按时刷新。
+    """
+    from app.core.collectors.base import collect_gold_price
+
+    db = SessionLocal()
+    try:
+        ok = collect_gold_price(db)
+        if ok:
+            logger.info("实时金价采集完成")
+    except Exception as e:  # noqa: BLE001
+        logger.warning("实时金价采集任务异常: %s", e)
     finally:
         db.close()
 
@@ -204,9 +227,21 @@ def start_scheduler() -> None:
     _scheduler = BackgroundScheduler(timezone="Asia/Shanghai")
 
     if not settings.demo_mode:
+        # 因子采集（可能与 FRED 等慢源重试），独立成任务，避免拖慢金价刷新
         _scheduler.add_job(
-            _job_collect, IntervalTrigger(seconds=settings.collect_interval_seconds),
-            id="collect", max_instances=1, coalesce=True,
+            _job_collect_factors, IntervalTrigger(seconds=settings.collect_interval_seconds),
+            id="collect_factors", max_instances=1, coalesce=True,
+        )
+        # 实时金价独立任务：高频轻量，保证走势图刷新不被因子采集拖慢
+        _scheduler.add_job(
+            _job_collect_gold, IntervalTrigger(seconds=settings.gold_collect_interval_seconds),
+            id="collect_gold", max_instances=1, coalesce=True,
+        )
+        # 启动后 10s 立即拉一次金价，缩短实时模式首屏到真实数据的等待
+        _scheduler.add_job(
+            _job_collect_gold, "date",
+            run_date=datetime.now() + timedelta(seconds=10),
+            id="collect_gold_initial", max_instances=1, coalesce=True,
         )
         _scheduler.add_job(
             _job_signal, IntervalTrigger(seconds=settings.signal_interval_seconds),
@@ -259,12 +294,12 @@ def get_scheduler_jobs() -> list[str]:
 def reconfigure_scheduler() -> dict:
     """根据当前 settings.demo_mode 动态挂载/卸载「实时采集/信号/NewsAPI」任务。
 
-    - demo_mode=True  → 仅保留新闻实时爬取（news_scrape），卸载 collect/signal/news
-    - demo_mode=False → 挂载 collect/signal/news（实时模式），news_scrape 始终保留
+    - demo_mode=True  → 仅保留新闻实时爬取（news_scrape），卸载 collect_factors/collect_gold/signal/news
+    - demo_mode=False → 挂载 collect_factors/collect_gold/signal/news（实时模式），news_scrape 始终保留
     返回 {scheduler_running, jobs} 供接口展示；无论成功与否都不抛异常（调用方已兜底）。
     """
     global _scheduler
-    live_ids = ("collect", "signal", "news")
+    live_ids = ("collect_factors", "collect_gold", "signal", "news")
 
     if _scheduler is None:
         # 调度器尚未启动：settings 已是新值，下次 start_scheduler 会按新值挂载
@@ -282,10 +317,15 @@ def reconfigure_scheduler() -> dict:
 
     if not settings.demo_mode:
         # 进入实时模式：补齐缺失的实时任务（缺失才加，避免重复挂载）
-        if not _has("collect"):
+        if not _has("collect_factors"):
             _scheduler.add_job(
-                _job_collect, IntervalTrigger(seconds=settings.collect_interval_seconds),
-                id="collect", max_instances=1, coalesce=True,
+                _job_collect_factors, IntervalTrigger(seconds=settings.collect_interval_seconds),
+                id="collect_factors", max_instances=1, coalesce=True,
+            )
+        if not _has("collect_gold"):
+            _scheduler.add_job(
+                _job_collect_gold, IntervalTrigger(seconds=settings.gold_collect_interval_seconds),
+                id="collect_gold", max_instances=1, coalesce=True,
             )
         if not _has("signal"):
             _scheduler.add_job(

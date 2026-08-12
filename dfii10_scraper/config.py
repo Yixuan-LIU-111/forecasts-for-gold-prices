@@ -23,9 +23,11 @@ REQUEST_HEADERS = {
 MIN_DELAY_SECONDS = 2.0
 
 # --- Retry Configuration ---
-MAX_RETRIES = 3
-RETRY_BASE_DELAY = 5.0
-REQUEST_TIMEOUT = 120
+# 受限网络下 curl 可能长时间挂起：缩短重试次数与退避，使因子采集在不可达时
+# 快速失败（而非阻塞数分钟），避免拖累后台调度器其余任务。
+MAX_RETRIES = 2
+RETRY_BASE_DELAY = 3.0
+REQUEST_TIMEOUT = 20
 
 # --- Output ---
 OUTPUT_DIR = Path(__file__).resolve().parent.parent / "data"

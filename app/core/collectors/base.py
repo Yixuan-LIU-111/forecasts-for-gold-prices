@@ -106,23 +106,69 @@ def collect_all_factors(db: Session) -> dict:
 
 
 def collect_gold_price(db: Session) -> bool:
-    """采集 XAU/USD 价格并写入 market_data 表。"""
+    """采集 XAU/USD 最新价格并写入 market_data 表（实时走势核心数据源）。
+
+    - 使用共享的 store_market_data（按 (timestamp, symbol) upsert 去重），
+      避免重复时间戳触发 IntegrityError 导致整批回滚、新数据写不进去。
+    - 单点采集（fetch_latest）：实时任务每轮只需追加一个最新价，轻量且高频，
+      配合采集器内的线程超时保护，保证永不挂死。
+    - 写库后裁剪 XAUUSD 历史，防止长期运行下 market_data 无限膨胀
+      （实时服务的资源清理，对应前端「避免内存泄漏」的同等后端约束）。
+    """
     from app.core.collectors.adapters import GoldPriceCollector
+    from app.core.data_collector import store_market_data
+    import pandas as pd
 
     c = GoldPriceCollector()
     try:
-        prices = c.fetch_series()
-        if not prices:
+        point = c.fetch_latest()
+        if not point:
+            logger.warning("采集金价失败：无可用数据源")
             return False
-        for ts, price, volume in prices:
-            db.add(
-                MarketData(
-                    timestamp=ts, symbol="XAUUSD", price=price, volume=volume
-                )
-            )
-        db.commit()
-        return True
+        ts, price, volume = point
+        df = pd.DataFrame(
+            [{"timestamp": ts, "symbol": "XAUUSD", "price": price, "volume": volume}]
+        )
+        n = store_market_data(db, df)
+        if n > 0:
+            _prune_xauusd(db, keep=5000)
+        logger.info("采集金价成功：写入 %d 条（XAUUSD）", n)
+        return n > 0
     except Exception as e:  # noqa: BLE001
         db.rollback()
         logger.warning("采集金价异常: %s", e)
         return False
+
+
+def _prune_xauusd(db: Session, keep: int = 5000) -> None:
+    """保留 XAUUSD 最近 keep 条，删除更早的历史，避免实时服务无限膨胀。
+
+    仅在明显超出阈值时才删，避免无谓写库；保留阈值远大于前端最大展示窗口
+    （7d≈672 点），不影响任意时间范围的走势渲染。
+    """
+    from sqlalchemy import select, func, desc
+
+    try:
+        total = db.execute(
+            select(func.count()).select_from(MarketData)
+            .where(MarketData.symbol == "XAUUSD")
+        ).scalar() or 0
+        if total <= keep:
+            return
+        cutoff = db.execute(
+            select(MarketData.timestamp)
+            .where(MarketData.symbol == "XAUUSD")
+            .order_by(desc(MarketData.timestamp))
+            .limit(1).offset(keep - 1)
+        ).scalar()
+        if cutoff is None:
+            return
+        db.execute(
+            MarketData.__table__.delete()
+            .where(MarketData.symbol == "XAUUSD")
+            .where(MarketData.timestamp < cutoff)
+        )
+        db.commit()
+    except Exception as e:  # noqa: BLE001
+        db.rollback()
+        logger.warning("XAUUSD 历史裁剪失败（不影响本轮数据）: %s", e)

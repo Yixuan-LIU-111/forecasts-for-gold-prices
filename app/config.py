@@ -70,6 +70,9 @@ class Settings(BaseSettings):
     # —— 调度（main 后端）——
     signal_interval_seconds: int = 300
     collect_interval_seconds: int = 60
+    # 实时金价采集周期（秒）。独立成任务，避免被慢速因子采集（如 FRED 重试）阻塞，
+    # 保证页面实时金价走势按时刷新。默认 30s，远小于前端 60s 轮询周期，确保图表持续滚动。
+    gold_collect_interval_seconds: int = 30
 
     # —— 实时爬取与刷新（本次优化新增）——
     # 调度器总开关：默认开启；设为 false 则完全不启动后台任务（纯静态数据）。
