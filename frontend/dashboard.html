@@ -186,6 +186,15 @@
     display:flex;align-items:center;gap:8px}
   .tile h4 .tag{font-size:10px;font-weight:600;color:var(--gold-deep);background:var(--gold-soft);
     padding:1px 8px;border-radius:20px}
+  .tile-head{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:var(--s3);flex-wrap:wrap}
+  .range-tabs{display:inline-flex;gap:4px;background:var(--bg-2);border:1px solid var(--line);
+    border-radius:9px;padding:3px}
+  .range-tabs button{appearance:none;border:0;background:transparent;cursor:pointer;
+    font-size:11.5px;font-weight:600;color:var(--ink-2);padding:4px 9px;border-radius:6px;
+    line-height:1;transition:.14s;font-family:var(--sans)}
+  .range-tabs button:hover{color:var(--ink-1)}
+  .range-tabs button.active{background:var(--gold);color:#1a1205;box-shadow:0 1px 2px rgba(0,0,0,.18)}
+  .range-tabs button:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
   .metric{font-family:var(--serif);font-size:30px;font-weight:600;line-height:1.05;
     font-variant-numeric:tabular-nums}
   .metric .u{font-size:14px;color:var(--ink-2);font-family:var(--sans);font-weight:500;margin-left:4px}
@@ -340,7 +349,10 @@
             <p class="band-note">XAU/USD 分钟级实时价格与关联指标：行情与美元指数来自新浪财经，VIX 来自 CBOE，10Y 实际利率来自 FRED（DFII10）。Plotly 折线图随页面刷新周期更新，具体数据源见「系统设置 · 数据源配置」。</p>
             <div class="grid g-asym">
               <div class="tile">
-                <h4>实时黄金价格走势 <span class="tag">Plotly</span></h4>
+                <div class="tile-head">
+                  <h4>实时黄金价格走势 <span class="tag">Plotly</span></h4>
+                  <div class="range-tabs" id="rangeTabs" role="group" aria-label="时间范围"></div>
+                </div>
                 <div id="priceChart" class="chart" style="height:300px"></div>
                 <div class="legend">
                   <span><i style="background:var(--gold)"></i>XAUUSD</span>
@@ -722,10 +734,54 @@ const baseLayout = {
 };
 const CFG = {displayModeBar:false, responsive:true};
 
+/* ===================== 时间范围切换 ===================== */
+/* 用户可在页面内切換走势图的时间窗；选择持久化到 localStorage，刷新后保留。
+   后端 serialize_market 已支持 1h/4h/1d/3d/7d/48h 各档（period_map 决定返回点数）。 */
+const RANGE_OPTIONS = [
+  {key:'1h',  label:'1时'}, {key:'4h',  label:'4时'}, {key:'1d',  label:'1日'},
+  {key:'3d',  label:'3日'}, {key:'7d',  label:'7日'}, {key:'48h', label:'48时'},
+];
+function parseRangeH(r){
+  if(!r) return 48;
+  const m = String(r).match(/^(\d+)\s*([hd])$/i);
+  if(!m) return 48;
+  const n = parseInt(m[1],10);
+  return m[2].toLowerCase()==='d' ? n*24 : n;   // d→小时，h→小时
+}
+function loadRangeState(){
+  let r = '48h';
+  try { const s = localStorage.getItem('gold_range'); if(s) r = s; } catch(_) {}
+  if(!RANGE_OPTIONS.some(o=>o.key===r)) r = '48h';
+  window._rangeHours = r;
+  return r;
+}
+function initRangeTabs(){
+  const box = document.getElementById('rangeTabs');
+  if(!box) return;
+  box.innerHTML = '';
+  RANGE_OPTIONS.forEach(o=>{
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.textContent = o.label;
+    b.dataset.range = o.key;
+    b.className = (o.key===window._rangeHours) ? 'active' : '';
+    b.addEventListener('click', ()=> selectRange(o.key));
+    box.appendChild(b);
+  });
+}
+function selectRange(r){
+  if(!RANGE_OPTIONS.some(o=>o.key===r)) return;
+  window._rangeHours = r;
+  try { localStorage.setItem('gold_range', r); } catch(_) {}
+  const box = document.getElementById('rangeTabs');
+  if(box) box.querySelectorAll('button').forEach(b=> b.classList.toggle('active', b.dataset.range===r));
+  if(document.querySelector('.view.active')?.dataset.view==='dashboard') loadDashboard();
+}
+
 /* ===================== 仪表盘 ===================== */
 async function loadDashboard(){
   const [market, signal, factors, news, stats, bt] = await Promise.allSettled([
-    api('/api/v1/market/price?range_hours=48h'),
+    api('/api/v1/market/price?range_hours=' + (window._rangeHours || '48h')),
     api('/api/v1/signals/latest'),
     api('/api/v1/factors'),
     api('/api/v1/news?limit=20'),
@@ -774,17 +830,28 @@ function drawPrice(d){
   const allDates = raw.length>0 && raw.every(s => s && !isNaN(toUTCms(s)));
   const xs = allDates ? raw.map(s => toUTCms(s)) : raw.map(s => s.slice(11,16));
   const p = d.prices.map(x => x.price);
-  // 横轴固定显示「最近 48 小时」窗口：以最新数据点为右边界，左边界=右边界-48h；
-  // 若历史数据不足 48h，则回退为数据实际跨度（min(xs)~max(xs)），避免出现大片空白。
+  // 横轴显示「所选时间范围」窗口：以最新数据点为右边界，左边界=右边界-窗口小时数；
+  // 若历史数据不足该窗口，则回退为数据实际跨度（min(xs)~max(xs)），避免出现大片空白。
+  const winH = parseRangeH(window._rangeHours || '48h');
   let xRange;
   if (allDates && xs.length) {
     const tEnd = Math.max(...xs);
-    const tStart = tEnd - 48 * 3600 * 1000;
+    const tStart = tEnd - winH * 3600 * 1000;
     xRange = [Math.min(tStart, Math.min(...xs)), tEnd];
   }
-  // 30 分钟均线需要至少 30 个数据点才绘制；不足时隐藏图例，避免"图例与折线无关系"。
-  const maReady = p.length >= 30;
-  const ma = maReady ? p.map((_,i)=> i<29?null:p.slice(i-29,i+1).reduce((s,x)=>s+x,0)/30) : [];
+  // 30 分钟均线：按约 30 分钟时间窗计算（与采样间隔解耦），而非固定 30 个点；
+  // 数据不足 30 分钟窗口时退化为可用窗口，但至少需 10 个点才绘制，不足则隐藏图例。
+  let maN = 30;
+  if (allDates && xs.length >= 2) {
+    const deltas = [];
+    for (let i = 1; i < xs.length; i++) deltas.push(xs[i] - xs[i-1]);
+    deltas.sort((a,b)=>a-b);
+    const med = deltas[Math.floor(deltas.length/2)] || 30000;
+    maN = Math.max(2, Math.round(30*60*1000 / med));
+  }
+  maN = Math.min(maN, Math.max(2, p.length));
+  const maReady = p.length >= 10 && p.length >= maN;
+  const ma = maReady ? p.map((_,i)=> i<maN-1 ? null : p.slice(i-maN+1, i+1).reduce((s,x)=>s+x,0)/maN) : [];
   const xAxis = allDates
     ? {...baseLayout.xaxis, type:'date', tickformat:'%H:%M', tickangle:-35, automargin:true, nticks:8, ticklabelmode:'period', range:xRange}
     : {...baseLayout.xaxis, type:'category', tickangle:-35, automargin:true, nticks:8};
@@ -1286,6 +1353,8 @@ async function applyDemoMode(enabled) {
 }
 
 /* 初始渲染仪表盘 + 启动自动刷新 */
+loadRangeState();
+initRangeTabs();
 loadDashboard();
 startAutoRefresh();
 loadDemoMode();
