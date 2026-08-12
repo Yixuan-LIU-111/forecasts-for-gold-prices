@@ -748,6 +748,10 @@ function parseRangeH(r){
   const n = parseInt(m[1],10);
   return m[2].toLowerCase()==='d' ? n*24 : n;   // d→小时，h→小时
 }
+function rangeLabel(r){
+  const o = RANGE_OPTIONS.find(x => x.key === r);
+  return o ? o.label : (r || '48时');
+}
 function loadRangeState(){
   let r = '48h';
   try { const s = localStorage.getItem('gold_range'); if(s) r = s; } catch(_) {}
@@ -807,7 +811,7 @@ function renderMarket(r){
   box.innerHTML =
     '<h4>当前报价</h4>' +
     '<div class="metric ' + (up?'c-bull':'c-bear') + '">' + fmt(d.current_price) + '<span class="u">USD/oz</span></div>' +
-    '<div class="sub">' + arrow(d.change) + ' ' + fmt(d.change) + ' (' + (up?'+':'') + fmt(d.change_pct) + '%) · 更新 ' + bjHM(d.timestamp) + '</div>' +
+    '<div class="sub">' + arrow(d.change) + ' ' + fmt(d.change) + ' (' + (up?'+':'') + fmt(d.change_pct) + '%) · 近' + rangeLabel(window._rangeHours) + ' · 更新 ' + bjHM(d.timestamp) + '</div>' +
     '<hr style="border:0;border-top:1px dashed var(--line);margin:var(--s4) 0">' +
     '<h4 style="margin-bottom:10px">关联指标</h4>' +
     '<div class="grid" style="gap:var(--s3)" id="quoteRel"></div>';
@@ -841,15 +845,16 @@ function drawPrice(d){
   }
   // 30 分钟均线：按约 30 分钟时间窗计算（与采样间隔解耦），而非固定 30 个点；
   // 数据不足 30 分钟窗口时退化为可用窗口，但至少需 10 个点才绘制，不足则隐藏图例。
-  let maN = 30;
+  let maN = 30, med = 30000;
   if (allDates && xs.length >= 2) {
     const deltas = [];
     for (let i = 1; i < xs.length; i++) deltas.push(xs[i] - xs[i-1]);
     deltas.sort((a,b)=>a-b);
-    const med = deltas[Math.floor(deltas.length/2)] || 30000;
+    med = deltas[Math.floor(deltas.length/2)] || 30000;
     maN = Math.max(2, Math.round(30*60*1000 / med));
   }
   maN = Math.min(maN, Math.max(2, p.length));
+  const maMinutes = Math.max(1, Math.round(maN * med / 60000));
   const maReady = p.length >= 10 && p.length >= maN;
   const ma = maReady ? p.map((_,i)=> i<maN-1 ? null : p.slice(i-maN+1, i+1).reduce((s,x)=>s+x,0)/maN) : [];
   const xAxis = allDates
@@ -868,9 +873,13 @@ function drawPrice(d){
      yaxis:{...baseLayout.yaxis, tickformat:'.2f'},  // 纵坐标统一保留 2 位小数
      margin:{...baseLayout.margin, b:44}             // 加高底部留白，避免时间标签被截断
   };
-  // 同步自定义图例：有均线数据时才显示"30分钟均线"，保持图例与真实折线一一对应。
+  // 同步自定义图例：有均线数据时才显示，标签按真实窗口动态生成（如"近30分钟均线"），
+  // 保持图例与真实折线一一对应；数据不足时隐藏。
   const maLegend = document.getElementById('priceMaLegend');
-  if(maLegend) maLegend.style.display = maReady ? '' : 'none';
+  if(maLegend){
+    if(maReady){ maLegend.innerHTML = '<i class="dash"></i>近' + maMinutes + '分钟均线'; maLegend.style.display = ''; }
+    else maLegend.style.display = 'none';
+  }
   // 复用图表实例：首次 newPlot，后续用 react 增量更新，避免每 60s 反复 newPlot
   // 累积 Plotly 内部状态/事件监听导致的内存泄漏；视觉与交互风格保持不变。
   if (window._pricePlotReady && document.getElementById('priceChart')) {
