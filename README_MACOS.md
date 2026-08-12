@@ -41,7 +41,48 @@ bash build/build_macos.sh
 
 脚本会自动：建虚拟环境 → 安装依赖 → PyInstaller 打包 → ad-hoc 签名 → 移除隔离。
 
-## 五、已知限制（非阻塞）
+## 五、演示模式开关与配置项
+
+系统支持 **演示模式 / 实时模式** 一键切换，无需重启服务：
+
+- **界面操作**：打开仪表盘 → 系统设置 → 模型配置瓦片 →「演示模式」开关；顶栏实时显示「演示模式 / 实时模式」文字标识。
+- **运行时切换**：通过接口切换后，后端立即重配置调度器（实时模式挂载采集/信号任务，演示模式卸载），并把结果持久化到 `.env`，服务重启后仍生效。
+- 同源托管页面已加 `no-cache` 响应头，切换后刷新即可看到最新界面，不会被浏览器旧缓存命中。
+
+### 相关接口
+
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| GET | `/api/v1/system/demo-mode` | 读取当前 `demo_mode`、调度任务清单、是否已持久化 |
+| POST | `/api/v1/system/demo-mode` | 运行时切换 `demo_mode`（请求体 `{"enabled": true/false}`），自动重配置调度器并写回 `.env` |
+
+示例：
+
+```bash
+# 查询当前模式
+curl http://127.0.0.1:8000/api/v1/system/demo-mode
+
+# 切换到实时模式
+curl -X POST http://127.0.0.1:8000/api/v1/system/demo-mode \
+  -H "Content-Type: application/json" \
+  -d '{"enabled": false}'
+```
+
+### 配置项（`.env`，运行时可改）
+
+| 配置项 | 默认值 | 说明 |
+|--------|--------|------|
+| `DEMO_MODE` | `true` | 演示模式：读内置 demo 数据；`false` 切换实时模式 |
+| `SCHEDULER_ENABLED` | `true` | 后台调度器总开关；`false` 则完全不启动后台任务 |
+| `NEWS_SCRAPE_ENABLED` | `true` | 新闻实时爬取任务开关（Playwright + LLM，不依赖付费外部 API） |
+| `NEWS_SCRAPE_INTERVAL_SECONDS` | `300` | 新闻爬取周期（秒） |
+| `NEWS_SCRAPE_MAX_ITEMS` | `4` | 每次每站点抓取条数（控制 LLM 调用量） |
+| `API_HOST` | `0.0.0.0` | 监听地址（打包后实际绑定 127.0.0.1） |
+| `API_PORT` | `8000` | 监听端口 |
+
+> 说明：`demo-mode` 接口写入的是 `DEMO_MODE` 这一行；其余字段改动需手动编辑 `.env` 后重启生效。
+
+## 六、已知限制（非阻塞）
 
 - 新闻实时爬虫（`news_scraper_llm`）依赖独立的 Python venv（playwright/langchain/sqlalchemy），
   未打入 app；缺失时系统会优雅跳过该后台任务，主预测功能不受影响。

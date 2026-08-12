@@ -73,12 +73,19 @@ pyinstaller build\gold_predictor.spec --noconfirm --clean
 在 `dist\点时成金\.env` 中可覆盖默认配置，常用项：
 
 ```ini
-DEMO_MODE=true            # 演示模式（读内置 demo 数据）
-SCHEDULER_ENABLED=true    # 后台调度器总开关
+DEMO_MODE=true                         # 演示模式（读内置 demo 数据）；false 切换实时模式
+SCHEDULER_ENABLED=true                 # 后台调度器总开关；false 则完全不启动后台任务
+NEWS_SCRAPE_ENABLED=true               # 新闻实时爬取任务开关（不依赖付费外部 API）
+NEWS_SCRAPE_INTERVAL_SECONDS=300       # 新闻爬取周期（秒）
+NEWS_SCRAPE_MAX_ITEMS=4                # 每次每站点抓取条数（控制 LLM 调用量）
 API_HOST=127.0.0.1
 API_PORT=8000
-OPENAI_API_KEY=           # 留空则用规则引擎降级
+OPENAI_API_KEY=                        # 留空则用规则引擎降级
 ```
+
+> **运行时切换演示模式**：服务启动后也可通过接口实时切换，无需重启。
+> `POST /api/v1/system/demo-mode`，请求体 `{"enabled": true|false}`；切换后会自动重配置调度器并写回 `.env`，重启仍生效。
+> 前端入口：系统设置 → 模型配置瓦片 →「演示模式」开关。
 
 完整模板见项目根的 `.env.example`。
 
