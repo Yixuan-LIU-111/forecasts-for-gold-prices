@@ -374,7 +374,7 @@ class GoldPriceCollector:
         import re
 
         try:
-            text = self._urllib_get(self.SINA_URL, timeout=5)
+            text = self._urllib_get(self.SINA_URL, timeout=4)
         except Exception as e:  # noqa: BLE001
             logger.warning("新浪金价采集异常: %s", e)
             return None
@@ -406,7 +406,7 @@ class GoldPriceCollector:
         try:
             import json
 
-            text = self._urllib_get(self.SWISSQUOTE_URL, timeout=6)
+            text = self._urllib_get(self.SWISSQUOTE_URL, timeout=4)
             data = json.loads(text)
             if not isinstance(data, list) or not data:
                 return None
@@ -418,13 +418,11 @@ class GoldPriceCollector:
                     mid = round((bid + ask) / 2.0, 2)
                     if mid <= 0:
                         return None
-                    ts_ms = topo.get("ts")
-                    ts = (
-                        datetime.fromtimestamp(ts_ms / 1000.0, tz=timezone.utc)
-                        if ts_ms
-                        else datetime.now(timezone.utc)
-                    )
-                    return (ts, mid, 0)
+                    # 时间戳用「采集发生的真实 UTC 时间」而非行情快照 ts：
+                    # 行情快照 ts 约每 25s 才变一次，若用作主键会与 upsert 去重冲突，
+                    # 导致连续两次采集拿到相同 ts 被丢弃、图表看似不动。用 now() 保证
+                    # 每个 30s tick 都是唯一且递增的新点，走势图稳定向前滚动。
+                    return (datetime.now(timezone.utc), mid, 0)
         except Exception as e:  # noqa: BLE001
             logger.warning("Swissquote 金价采集异常: %s", e)
         return None
@@ -434,57 +432,70 @@ class GoldPriceCollector:
         try:
             import json
 
-            text = self._urllib_get(self.GOLDAPI_URL, timeout=6)
+            text = self._urllib_get(self.GOLDAPI_URL, timeout=4)
             d = json.loads(text)
             price = float(d.get("price") or 0)
             if price <= 0:
                 return None
-            ua = d.get("updatedAt")
-            if ua:
-                try:
-                    ts = datetime.fromisoformat(str(ua).replace("Z", "+00:00"))
-                except Exception:  # noqa: BLE001
-                    ts = datetime.now(timezone.utc)
-            else:
-                ts = datetime.now(timezone.utc)
-            return (ts, round(price, 2), 0)
+            # 时间戳用采集发生的真实 UTC 时间（理由同 fetch_swissquote），保证每个
+            # tick 唯一递增、不会被 upsert 去重掉。
+            return (datetime.now(timezone.utc), round(price, 2), 0)
         except Exception as e:  # noqa: BLE001
             logger.warning("gold-api 金价采集异常: %s", e)
         return None
 
-    def fetch_latest(self, timeout: float = 18.0) -> Optional[tuple[datetime, float, int]]:
-        """返回 (timestamp, price, volume)，多源容错，按实时性/可达性排序：
+    def fetch_latest(self, timeout: float = 8.0) -> Optional[tuple[datetime, float, int]]:
+        """并行多源容错，取第一个成功返回的实时金价。
 
-        1) Swissquote 逐笔外汇报价（首选：真正逐 tick 变动、国内可达、无需 key）
-        2) gold-api.com 实时金价（次级兜底）
-        3) 新浪财经 XAU/USD（最后兜底；其 latest 字段本环境常为陈旧快照）
-
-        整调用线程 + 超时保护：任何单一源在网络受限下「挂起」而非抛错时，
-        也能在 timeout 内返回，确保实时采集任务永不阻塞后台调度器，
-        从而不影响页面金价走势的定时刷新。每个源内部也各自带 urllib 超时。
+        把 Swissquote / gold-api / 新浪 三个源各自放进守护线程**并行**拉取，
+        谁先成功就用谁。这样即便某个源握手挂起（如 Swissquote SSL 超时），
+        其它源仍可快速交付；整轮耗时被 deadline 牢牢限制在约 timeout 秒内，
+        不会再因「串行叠加（6s×3≈18s）」超过 30s 调度间隔，导致下一拍
+        _job_collect_gold 被 APScheduler 以「max_instances 达上限」跳过，
+        从而保证页面实时走势每个 tick 都不丢。各源内部 socket 超时已收紧到 4s。
         """
         import concurrent.futures as _cf
 
-        def _run() -> Optional[tuple[datetime, float, int]]:
-            for fetcher in (self.fetch_swissquote, self.fetch_goldapi, self.fetch_sina):
-                try:
-                    r = fetcher()
-                except Exception as e:  # noqa: BLE001
-                    logger.warning("%s 采集异常: %s", fetcher.__name__, e)
-                    r = None
+        fetchers = (self.fetch_swissquote, self.fetch_goldapi, self.fetch_sina)
+
+        def _safe(fn):
+            try:
+                return fn()
+            except Exception as e:  # noqa: BLE001
+                logger.debug("%s 采集异常: %s", fn.__name__, e)
+                return None
+
+        def _safe_result(fut):
+            try:
+                return fut.result()
+            except Exception:  # noqa: BLE001
+                return None
+
+        ex = _cf.ThreadPoolExecutor(max_workers=len(fetchers))
+        try:
+            futs = [ex.submit(_safe, f) for f in fetchers]
+            # 先等「第一个完成」的源（最快返回者），不让慢源阻塞整体返回
+            done, pending = _cf.wait(
+                futs, timeout=timeout, return_when=_cf.FIRST_COMPLETED
+            )
+            for fut in done:
+                r = _safe_result(fut)
                 if r is not None:
                     return r
-            return None
-
-        try:
-            with _cf.ThreadPoolExecutor(max_workers=1) as ex:
-                result = ex.submit(_run).result(timeout=timeout)
-        except _cf.TimeoutError:
-            logger.warning("金价采集超时（>%ss），跳过本轮", timeout)
-            return None
-        if result is None:
+            # 首个完成的源都失败，再看其余源（总耗时仍受 timeout 限制）
+            for fut in _cf.as_completed(pending, timeout=max(0.1, timeout)):
+                r = _safe_result(fut)
+                if r is not None:
+                    return r
             logger.warning("金价采集失败：Swissquote / gold-api / 新浪 均不可用")
-        return result
+            return None
+        except _cf.TimeoutError:
+            logger.warning("金价采集在 %ss 内无源返回，跳过本轮", timeout)
+            return None
+        finally:
+            # 关键：不等慢源线程跑完（否则会等到其 socket 超时，拖慢每个 tick），
+            # 直接放弃尚未完成的任务，运行中的线程会在各自 socket 超时后自行结束。
+            ex.shutdown(wait=False, cancel_futures=True)
 
     def fetch_series(self, period: str = "1d", interval: str = "5m") -> list[tuple]:
         """返回 [(timestamp, price, volume), ...]。实时源为逐笔报价无历史，
