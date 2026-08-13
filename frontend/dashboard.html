@@ -858,7 +858,7 @@ function drawPrice(d){
   const maReady = p.length >= 10 && p.length >= maN;
   const ma = maReady ? p.map((_,i)=> i<maN-1 ? null : p.slice(i-maN+1, i+1).reduce((s,x)=>s+x,0)/maN) : [];
   const xAxis = allDates
-    ? {...baseLayout.xaxis, type:'date', tickformat:'%H:%M', tickangle:-35, automargin:true, nticks:8, ticklabelmode:'period', range:xRange}
+    ? {...baseLayout.xaxis, type:'date', tickformat:'%H:%M', tickangle:-35, automargin:true, nticks:8, range:xRange}
     : {...baseLayout.xaxis, type:'category', tickangle:-35, automargin:true, nticks:8};
   const htMain = allDates ? '%{x|%H:%M}<br>XAU/USD %{y:.2f}<extra></extra>' : '%{x}<br>XAU/USD %{y:.2f}<extra></extra>';
   const htMa = allDates ? '%{x|%H:%M}<br>30分钟均线 %{y:.2f}<extra></extra>' : '%{x}<br>30分钟均线 %{y:.2f}<extra></extra>';
@@ -870,8 +870,8 @@ function drawPrice(d){
   }
   const layout = {...baseLayout,
      xaxis:xAxis,
-     yaxis:{...baseLayout.yaxis, tickformat:'.2f'},  // 纵坐标统一保留 2 位小数
-     margin:{...baseLayout.margin, b:44}             // 加高底部留白，避免时间标签被截断
+     yaxis:{...baseLayout.yaxis, tickformat:'.2f', automargin:true},  // 纵坐标保留 2 位小数，自动边距避免标签被截断
+     margin:{...baseLayout.margin, b:44, l:56}                         // 加大左侧留白，进一步避免 y 轴标签溢出
   };
   // 同步自定义图例：有均线数据时才显示，标签按真实窗口动态生成（如"近30分钟均线"），
   // 保持图例与真实折线一一对应；数据不足时隐藏。

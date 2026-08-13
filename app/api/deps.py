@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import logging
 import urllib.parse
+from datetime import datetime, timedelta, timezone
 from typing import Any, Optional
 
 from sqlalchemy import select, desc, func
@@ -52,17 +53,23 @@ def serialize_signal(s: Optional[Signal]) -> Optional[dict]:
 
 
 def serialize_market(db: Session, range_hours: str = "4h") -> dict:
-    """构造行情响应（对齐 market.json）。"""
-    period_map = {"1h": 12, "4h": 48, "1d": 96, "3d": 288, "7d": 672, "48h": 5760}
-    limit = period_map.get(range_hours, 48)
+    """构造行情响应（对齐 market.json）。
+
+    按 range_hours 真实时间窗过滤，避免 48h 窗口混入历史种子数据；
+    同时保留 count cap，防止极端情况下返回过多点。
+    """
+    hours_map = {"1h": 1, "4h": 4, "1d": 24, "3d": 72, "7d": 168, "48h": 48}
+    cap_map = {"1h": 120, "4h": 480, "1d": 1440, "3d": 4320, "7d": 10080, "48h": 5760}
+    hours = hours_map.get(range_hours, 4)
+    cap = cap_map.get(range_hours, 480)
+    cutoff = datetime.now(timezone.utc) - timedelta(hours=hours)
 
     rows = db.execute(
         select(MarketData)
-        .where(MarketData.symbol == "XAUUSD")
-        .order_by(desc(MarketData.timestamp))
-        .limit(limit)
+        .where(MarketData.symbol == "XAUUSD", MarketData.timestamp >= cutoff)
+        .order_by(MarketData.timestamp)
+        .limit(cap)
     ).scalars().all()
-    rows = list(reversed(rows))
 
     if not rows:
         logger.warning("serialize_market: market_data 表无 XAUUSD 数据！返回空行情")
